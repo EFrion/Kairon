@@ -1,0 +1,401 @@
+body { font-family: Arial, sans-serif; margin: 20px; }
+h1 { color: #333; }
+.header-info { background-color: #f4f4f4; padding: 10px; border-radius: 5px; margin-bottom: 20px; font-size: 0.9em; }
+table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+th, td {white-space: nowrap; border: 1px solid #ddd; padding: 8px; text-align: center; }
+th { background-color: #007BFF; color: white; }
+tr:nth-child(even) { background-color: #f9f9f9; }
+.nav a { margin-right: 10px; text-decoration: none; color: #007BFF; font-weight: bold; }
+.status-box { border: 1px solid #ccc; padding: 20px; margin-top: 20px; border-radius: 5px; }
+
+/* Styles for the "Months Paid (TTM)" column */
+.month-visualizer-cell {
+    padding: 0; 
+    text-align: center;
+    vertical-align: middle;
+    min-width: 160px;
+}
+.month-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* Style for the data cell items */
+.month-data-item {
+    width: 100%;
+    padding: 4px 0; /* Increased padding for better visual separation */
+    text-align: center;
+    border-left: 1px solid #ddd;
+    font-size: 10px; /* Small font for the initial */
+    font-weight: bold;
+}
+
+/* Style for PAID months */
+.month-data-item.paid {
+    background-color: #d4edda; /* Light green background */
+    color: #155724; /* Dark green text */
+    border-radius: 2px; /* Slight rounding */
+}
+/* Remove the left border from the first item in the row */
+.month-label-header:first-child, .month-data-item:first-child {
+    border-left: none;
+}
+
+/* Enhanced container for the footer to stack labels over counts */
+.month-container.footer-stack {
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+}
+
+/* Container for each internal row */
+.month-label-row, .month-data-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: stretch;
+    width: 100%;
+}
+
+.month-label-item {
+    width: 100%;
+    padding: 1px 0;
+    font-size: 10px; 
+    font-weight: bold;
+    background-color: #d4edda; 
+    color: #155724;
+    text-align: center;
+    border-left: 0px solid ; /* Lighter border for blue bg */
+}
+
+/* Ensure the first label doesn't have offset spacing */
+.month-label-item:first-child {
+    border-left: none;
+}
+
+/* Style for the total row */
+.total-row {
+    border-top: 2px solid #dee2e6;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+/* Apply header styling to all cells in the total row */
+.total-row td {
+    background-color: #007BFF; /* Force the blue background */
+    color: white;             /* Force white text */
+    /* Reset specific padding for visualizer cell contents */
+    padding: 8px;
+}
+
+.total-row td.month-visualizer-cell {
+    padding: 0 !important; 
+}
+
+/* Ensure the monthly count cell content is visible */
+/* This targets the 12 individual items inside the last total cell */
+.total-row .month-data-item {
+    /* This ensures the month counts are visible against the blue background */
+    color: white !important; 
+    font-size: 14px;
+    background-color: transparent !important;
+}
+
+/* Style for the monthly dividend sum totals */
+.total-dividend-sum {
+    font-size: 14px; /* Use small font to fit numbers */
+    font-weight: bold;
+    display: block; /* Make sure the span takes up the full width */
+    color: white;
+}
+
+/* Define colour formatting depending on metrics thresholds */
+.bg-red { background-color: #f8d7da !important; color: #721c24 !important; font-weight: bold;}
+.bg-orange { background-color: #fff3cd !important; color: #856404 !important; font-weight: bold;}
+.bg-green { background-color: #d4edda !important; color: #155724 !important; font-weight: bold;}
+
+/* Basic styling for form groups */
+.form-group {
+    margin-bottom: 10px;
+}
+.form-group label {
+    display: block;
+    font-weight: bold;
+}
+.form-group input, .form-group select {
+    width: 100%;
+    padding: 5px;
+    box-sizing: border-box;
+}
+
+/* Row fading */
+.row-fade-out {
+    opacity: 0;
+    transform: translateX(20px);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+/* Inputs */
+input {
+    background: transparent; border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; font-weight: bold; width: 160px; text-align: center; outline: none; transition: all 0.3s;"
+}
+
+input:hover {
+    background: rgba(255,255,255,0.15) !important;
+    border-color: #3498db !important;
+}
+
+input:focus {
+    background: rgba(255,255,255,0.2) !important;
+    border-color: #2ecc71 !important;
+    box-shadow: 0 0 10px rgba(46, 204, 113, 0.3);
+}
+
+/* Hide arrows/spinners on the number input for a cleaner look */
+input[type=number]::-webkit-inner-spin-button, 
+input[type=number]::-webkit-outer-spin-button { 
+  -webkit-appearance: none; 
+  margin: 0; 
+}
+
+input[type=number]{
+    -moz-appearance: textfield;
+}
+
+/* Container for each notification */
+.notification-item {
+    padding: 12px 16px;
+    font-size: 0.9rem;
+    transition: background-color 0.4s ease;
+}
+
+/* The "New" state with a different background */
+.notification-unread {
+    background-color: #f0f7ff; /* Soft light blue */
+    border-left: 4px solid #007bff; /* Blue vertical bar */
+}
+
+/* Tiny status dots to represent the categories */
+.status-indicator {
+    height: 8px;
+    width: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 5px;
+}
+
+/* Scrollable dropdown if many notifications */
+#notification-list {
+    right: 0;
+    top: 100%;
+    z-index: 1050;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 0;
+    margin-top: 10px;
+}
+
+/* Ensure the list is hidden by default but transitions nicely */
+#notification-list[style*="display: block"] {
+    animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.small.text-muted {
+    font-size: 0.75rem;
+    margin-top: 4px;
+}
+
+/* Table behaviour*/
+
+/* Hover effect to highlight the current row across all 12 months */
+.table-container tbody tr:hover {
+    background-color: #f1f8ff !important;
+    transition: background-color 0.2s ease;
+}
+
+/* Ensure the divider row doesn't highlight on hover */
+.table-container tbody tr.divider-row:hover {
+    background-color: transparent !important;
+}
+
+.table-container tbody tr:hover td:first-child {
+    background-color: #f1f8ff !important;
+}
+
+.table-container tbody tr.divider-row:hover td:first-child {
+    background-color: transparent !important;
+}
+
+/* Ensure the formatting rules don't prevent highlighting */
+.table-container tbody tr:hover td {
+    background-image: linear-gradient(0deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.05)) !important;
+}
+
+.table-container tbody tr:hover .bg-red { background-color: #f8d7da !important; }
+.table-container tbody tr:hover .bg-orange { background-color: #fff3cd !important; }
+.table-container tbody tr:hover .bg-green { background-color: #d4edda !important; }
+
+/* */
+.table-container {
+    width: 100%;           /* Take up the full width of the parent */
+    overflow-x: auto;      /* Add a horizontal scrollbar if content overflows */
+    overflow-y: hidden;    /* Prevent vertical scrollbars on the container */
+    margin-bottom: 20px;   /* Space between sections */
+}
+
+/* Make the scrollbar look good */
+.table-container::-webkit-scrollbar {
+    height: 16px;
+}
+.table-container::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 16px;
+}
+.table-container::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* Make the first header sticky */
+thead th:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 3; /* Keeps header above other cells */
+}
+
+/* Make the first cell of every row sticky */
+tbody td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 2; /* Keeps cell above other body cells */
+    background-color: white;
+    border-right: 2px solid #ddd; /* Adds a visual separator */
+}
+
+tfoot td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 5;
+    font-weight: bold;
+    border-right: 2px solid #ddd;
+}
+
+tbody tr:nth-child(even) td:first-child {
+    background-color: #f9f9f9; /* Match zebra-stripe color */
+}
+
+/* Ensure the table doesn't collapse borders weirdly */
+table {
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+/* Highlights the row currently selected in the sidebar */
+.active-ticker td {
+    background-color: #e8f4ff !important; /* Slightly darker than standard hover */
+    border-left: 4px solid #007BFF; /* High-contrast indicator */
+}
+
+/* Ensure our sidebar table handles the sticky behavior like the main table */
+#ticker-sidebar-table td {
+    transition: all 0.2s ease;
+}
+
+/* Match total-row styling for the sidebar bottom */
+#ticker-sidebar-table tfoot td {
+    background-color: #007BFF;
+    color: white;
+    padding: 0px;
+    text-align: center;
+}
+
+/* Container for the whole layout */
+.stats-page-layout {
+    display: flex;
+    gap: 5px;
+    align-items: stretch; /* Forces chart and table to be same height */
+    margin-top: 0;
+}
+
+/* Make only the body scrollable */
+#ticker-sidebar-table {
+    border-collapse: collapse;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    margin: 0px;
+}
+
+#ticker-sidebar-table thead, 
+#ticker-sidebar-table tfoot {
+    flex-shrink: 0;
+}
+
+#ticker-sidebar-table tbody {
+    display: block;
+    /* Height for ~10 rows (approx 45px per row) */
+    max-height: 500px; 
+    overflow-y: auto;
+    overflow-x: hidden;
+    width: 100%;
+}
+
+/* Force rows to behave like a table even inside flex */
+#ticker-sidebar-table tr {
+    display: table;
+    width: 100%;
+    table-layout: fixed;
+}
+
+/* Chart container styling */
+.chart-container {
+    flex-grow: 1;
+    background: white;
+    padding: 0px;
+    margin-top: 0;
+    border-left: none; /* Leans against the table */
+    border-radius: 0 4px 4px 0; /* Rounded corners only on the right */
+    display: flex;
+    flex-direction: column;
+}
+
+#price-plot-container {
+    flex-grow: 1; /* Ensures plot fills the height */
+}
+
+/* Style for the active row to make it pop */
+.active-ticker {
+    background-color: #e7f3ff !important;
+}
+
+.secondary-ticker {
+    background-color: #ffc107 !important; /* Colour for secondary ticker (2D correlation only) */
+}
+
+.table-chart-container {
+    width: 200px;
+    flex-shrink: 0;
+    border-radius: 4px 0 0 4px; /* Rounded corners only on the left */
+    display: flex;
+    margin-top: 0;
+    flex-direction: column;
+}
+
+.tab {
+    font-weight: bold;
+    font-size: 0.9em;
+    transition: background 0.2s;
+}
+.tab:hover {
+    background: #e9ecef;
+}
+.active-tab {
+    background: white !important;
+    border-bottom: 2px solid #007BFF;
+    color: #007BFF;
+}

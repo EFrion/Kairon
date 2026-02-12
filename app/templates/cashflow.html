@@ -1,0 +1,529 @@
+<!doctype html>
+<head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<title>{{ title }}</title>
+
+<body>
+    <div class="nav">
+        <a href="/cashflow">Cash Flow</a>
+        <a href="/portfolio">Portfolio Metrics</a>
+        <a href="/test">Optimisation & Backtesting</a>
+    </div>
+    
+    <div class="month-navigator" style="margin-bottom: 20px; padding: 15px; background: #f4f4f4; border-radius: 8px; display: flex; align-items: center; gap: 15px;">
+        <form id="nav-form" method="GET" action="{{ url_for('cashflow.cashflow_feature') }}" style="display: flex; align-items: center; gap: 10px;">
+            <label><b>Viewing Financial Period:</b></label>
+            
+            <button type="button" onclick="changeMonth(-1)" style="padding: 5px 10px; cursor: pointer; border-radius: 4px; border: 1px solid #ccc;">&laquo; Prev</button>
+            
+            <input type="month" id="month-input" name="month" value="{{ current_view }}" onchange="this.form.submit()" style="padding: 5px; border-radius: 4px; border: 1px solid #ccc;">
+            
+            <button type="button" onclick="changeMonth(1)" style="padding: 5px 10px; cursor: pointer; border-radius: 4px; border: 1px solid #ccc;">Next &raquo;</button>
+            
+            <span style="color: #666; font-size: 0.9rem;"> (Showing items active during this month)</span>
+        </form>
+    </div>
+
+    <h1>{{ title }}</h1>
+    
+    <div class="cashflow_feature-header">
+        <h1>Cash Flow Summary</h1>
+    </div>
+
+    <table class="data-table" id="summary-table">
+        <thead>
+            <tr>
+                <th>Category</th>
+                <th class="text-right">Monthly Total (€)</th>
+                <th class="text-right">Annual Total (€)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for category, totals in metrics.breakdown.items() %}
+            <tr>
+                <td style="font-weight: bold;">{{ category|replace('_', ' ')|title }}</td>
+                <td class="text-right">{{ totals.monthly|round(2) }}</td>
+                <td class="text-right">{{ totals.annual|round(2) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr class="total-row">
+                <td style="font-weight: bold;">NET CASH FLOW</td>
+                <td class="text-right" style="font-weight: bold; color: {{ 'green' if metrics.total_net_monthly >= 0 else 'red' }};">
+                    € {{ metrics.total_net_monthly|round(2) }}
+                </td>
+                <td class="text-right" style="font-weight: bold; color: {{ 'green' if metrics.total_net_annual >= 0 else 'red' }};">
+                    € {{ metrics.total_net_annual|round(2) }}
+                </td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <h3 style="margin-top: 30px;">Annual Breakdown by Label ({{ current_view.split('-')[0] }})</h3>
+    <div style="overflow-x: auto;">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="text-align: left;">Label</th>
+                    <th>Jan</th><th>Feb</th><th>Mar</th><th>Apr</th><th>May</th><th>Jun</th>
+                    <th>Jul</th><th>Aug</th><th>Sep</th><th>Oct</th><th>Nov</th><th>Dec</th>
+                    <th class="total-column">Annual Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% set ns = namespace(last_category_is_income=true) %}
+
+                {% for (label, category), month_values in label_breakdown.items() %}
+    
+                    {# Identify if the current row is income or expense based on sum #}
+                    {% set current_is_income = 'income' in category.lower() %}
+
+                    {# Transition point: Insert thick divider #}
+                    {% if ns.last_category_is_income and not current_is_income %}
+                        <tr class="divider-row" style="height: 0px;"">
+                            <td colspan="14" style="padding: 0; vertical-align: middle;">
+                                <div style="border-top: 2px solid powderblue; margin: 0px 0;"></div>
+                            </td>
+                        </tr>
+                        {% set ns.last_category_is_income = false %}
+                    {% endif %}
+
+                    <tr id="breakdown-row-{{ label | replace(' ', '-') }}">
+                        <td class="label-name" style="text-align: left; padding: 12px 8px;">
+                            <div style="font-weight: bold;">{{ label }}</div>
+                            <div style="font-size: 0.7rem; color: #6c757d; font-weight: normal; text-transform: uppercase;">
+                                {{ category | replace('_', ' ') }}
+                            </div>
+                        </td>
+                        {% for val in month_values %}
+                        <td class="month-cell" style="color: {{ 'green' if val >= 0 else 'red' }}; text-align: right;">
+                            {{ "%.2f"|format(val) if val != 0 else '-' }}
+                        </td>
+                        {% endfor %}
+                        
+                        {# The label annual total #}
+                        <td class="total-column" style="color: {{ 'green' if annual_sum_cat[(label, category)] >= 0 else 'red' }}; text-align: right;">
+                            € {{ "%.2f"|format(annual_sum_cat[(label, category)]) }}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr style="background-color: #f0f0f0; font-weight: bold;">
+                    <td style="text-align: left;">MONTHLY NET</td>
+                    {% for m_idx in range(12) %}
+                        {% set ns = namespace(col_total=0) %}
+                        {% for row_vals in label_breakdown.values() %}
+                            {% set ns.col_total = ns.col_total + row_vals[m_idx] %}
+                        {% endfor %}
+                        <td class="text-right" style="color: {{ 'green' if ns.col_total >= 0 else 'red' }};">
+                            € {{ "%.2f"|format(ns.col_total) }}
+                        </td>
+                    {% endfor %}
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+
+    <hr>
+    
+    {# DETAILED ITEMS #}
+    <h2>Detailed Transactions</h2>
+    
+    <div class="input-section" style="margin-bottom: 20px;">
+        <button id="add-transaction-btn" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">
+            + Add New Transaction
+        </button>
+        
+        <form id="cashflow-form" method="POST" action="{{ url_for('cashflow.add_cashflow_entry') }}" 
+              style="display: none; padding: 20px; border: 1px solid #ccc; border-radius: 5px; margin-top: 15px;">
+            <input type="hidden" name="current_view" value="{{ current_view }}">
+            
+            <h3 id="form-title">New Transaction Details</h3>
+            
+            <div class="form-group">
+                <label for="item_description">Description:</label>
+                <input type="text" id="item_description" name="item_description" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="entry_date">Date:</label>
+                <input type="date" id="entry_date" name="entry_date" value="{{ today_date }}" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="amount_eur">Amount (€) (Use '-' for expense):</label>
+                <input type="number" step="0.01" id="amount_eur" name="amount_eur" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="category">Category:</label>
+                <select id="category" name="category" required>
+                    <option value="active_income">Active Income</option>
+                    <option value="passive_income">Passive Income</option>
+                    <option value="recurring_consumption">Recurring Consumption</option>
+                    <option value="discrete_consumption">Discrete Consumption</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="frequency">Frequency:</label>
+                <select id="frequency" name="frequency" required>
+                    <option value="One-Time">One-Time</option>
+                    <option value="Monthly">Monthly</option>
+                    <option value="Quarterly">Quarterly</option>
+                    <option value="Annual">Annual</option>
+                </select>
+            </div>
+
+            <button type="submit" id="submit-button" style="margin-top: 10px;">Save Transaction</button>
+            <button type="button" id="cancel-transaction-btn" style="margin-top: 10px;">Cancel</button>
+
+        </form>
+    </div>
+
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th> Description</th>
+                <th>Category</th>
+                <th class="text-right">Amount (€)</th>
+                <th>Frequency</th>
+                <th style="width: 5%;">Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in raw_items %}
+            {% set amount = item.amount_eur|round(2) %}
+            {% set amount_class = 'income-text' if amount >= 0 else 'expense-text' %}
+
+            <tr id="row-{{ item.id }}">
+                <td>{{ item.entry_date|strftime('%Y-%m-%d') }}</td>
+                <td style="font-weight: bold;">{{ item.item_description }}</td>
+                <td>{{ item.category|replace('_', ' ') }}</td>
+                
+                <td class="text-right {{ amount_class }}">
+                    {# Display the sign explicitly #}
+                    {% if amount > 0 %}+{% endif %}{{ amount }}
+                </td>
+                
+                <td>{{ item.frequency }}</td>
+                
+                <td class="text-center">
+                    <button class="update-btn" 
+                            data-id="{{ item.id }}" 
+                            data-description="{{ item.item_description }}"
+                            data-amount="{{ item.amount_eur }}"
+                            data-category="{{ item.category }}"
+                            data-frequency="{{ item.frequency }}"
+                            data-date="{{ item.entry_date|strftime('%Y-%m-%d') }}"
+                            style="color: blue; cursor: pointer; border: none; background: none; margin-right: 10px;">
+                        📈
+                    </button>
+
+                    <button class="delete-btn"
+                            data-description="{{ item.item_description }}"
+                            data-id="{{ item.id }}"
+                            data-amount="{{ item.amount_eur }}"
+                            data-frequency="{{ item.frequency }}"
+                            style="color: red; cursor: pointer; border: none; background: none;">
+                        🗑️
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Form toggles
+            const addBtn = document.getElementById('add-transaction-btn');
+            const cancelBtn = document.getElementById('cancel-transaction-btn');
+            const form = document.getElementById('cashflow-form');
+
+            if (addBtn) {
+                addBtn.addEventListener('click', function() {
+                    console.log("addbtn clicked");
+                    form.style.display = 'block';
+                    addBtn.style.display = 'none';
+                });
+            }
+
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', function() {
+                    console.log("cancelBtn clicked");
+                    form.style.display = 'none';
+                    addBtn.style.display = 'block';
+                    form.reset();
+                });
+            }
+            
+
+            // Deletion logic
+            document.querySelectorAll('.delete-btn').forEach(button => {
+                button.addEventListener('click', function(event) {
+                    console.log("deleteBtn clicked");
+                    const btn = event.currentTarget;
+                    const entryId = btn.getAttribute('data-id');
+                    const label = btn.getAttribute('data-description');
+                    const amount = btn.getAttribute('data-amount'); 
+                    const freq = btn.getAttribute('data-frequency');
+                    
+                    if (!entryId) {
+                        console.error("Error: Could not find data-id on the clicked element.");
+                        return;
+                    }
+
+                    // Send DELETE request to Flask
+                    fetch(`/delete_cashflow_entry/${entryId}`, {
+                        method: 'POST', // Using POST as simple fetch doesn't easily support DELETE without CORS setup
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    })
+                    .then(response => {
+                        if (!response.ok) throw new Error('Network response was not ok');
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.status === 'success') {
+                            // 1. Remove the row from the table
+                            const entryDate = btn.closest('tr').cells[0].innerText;
+                            const rowToRemove = document.getElementById(`row-${entryId}`);
+                            
+                            if (rowToRemove) {
+                                // Start the animation
+                                rowToRemove.classList.add('row-fade-out');
+                                
+                                // Wait for animation to finish (400ms) before removing from DOM
+                                setTimeout(() => {
+                                    rowToRemove.remove();
+                                }, 400);
+                            }
+                            
+                            // Update the summary metrics
+                            updateSummaryTable(data.metrics); // Updates the 4-row summary
+                            updateBreakdownTable(label, amount, freq, entryDate);    // Updates the 13-column footer
+                        } else {
+                            alert('Error deleting item: ' + data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Fetch Error:', error);
+                        alert('Could not delete item. Please check the console.');
+                    });
+                });
+            });
+            
+            // Summary update function
+            function updateSummaryTable(metrics) {
+                // Check if metrics actually exists
+                if (!metrics || !metrics.breakdown) {
+                    console.error("Update failed: 'metrics' or 'breakdown' is missing from server response.", metrics);
+                    return; 
+                }
+                
+                const table = document.getElementById('summary-table');
+                if (!table) return;
+
+                // Update the body (category breakdowns)
+                const tbody = table.querySelector('tbody');
+                let newRows = '';
+                
+                // Fix the table rows
+                const categoryOrder = [
+                    'active_income', 
+                    'passive_income', 
+                    'recurring_consumption', 
+                    'discrete_consumption'
+                ];
+
+                categoryOrder.forEach(category => {
+                    // Get the totals for this category, or default to 0 if missing
+                    const totals = metrics.breakdown[category] || { monthly: 0, annual: 0 };
+                    
+                    // Format category: 'active_income' -> 'Active Income'
+                    const displayCategory = category.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                    
+                    newRows += `
+                        <tr>
+                            <td style="font-weight: bold;">${displayCategory}</td>
+                            <td class="text-right">${totals.monthly.toFixed(2)}</td>
+                            <td class="text-right">${totals.annual.toFixed(2)}</td>
+                        </tr>
+                    `;
+                });
+                tbody.innerHTML = newRows;
+
+                // Update the footer (net totals)
+                const tfoot = table.querySelector('tfoot');
+                const monthlyNet = metrics.total_net_monthly;
+                const annualNet = metrics.total_net_annual;
+                
+                const monthlyColor = monthlyNet >= 0 ? 'green' : 'red';
+                const annualColor = annualNet >= 0 ? 'green' : 'red';
+
+                tfoot.innerHTML = `
+                    <tr class="total-row">
+                        <td style="font-weight: bold;">NET CASH FLOW</td>
+                        <td class="text-right" style="font-weight: bold; color: ${monthlyColor};">
+                            € ${monthlyNet.toFixed(2)}
+                        </td>
+                        <td class="text-right" style="font-weight: bold; color: ${annualColor};">
+                            € ${annualNet.toFixed(2)}
+                        </td>
+                    </tr>`;
+            }
+            
+            function updateBreakdownTable(label, deletedAmt, frequency, startDateStr, endDateStr) {
+                const rowId = `breakdown-row-${label.replace(/\s+/g, '-')}`;
+                const row = document.getElementById(rowId);
+                if (!row) return;
+
+                const amt = parseFloat(deletedAmt);
+                
+                // Parse the dates (handle the fact that endDate might be null/empty)
+                const start = new Date(startDateStr);
+                const end = endDateStr ? new Date(endDateStr) : null;
+                const viewYear = start.getFullYear(); 
+
+                let totalRowValueForYear = 0;
+
+                for (let i = 0; i < 12; i++) {
+                    const cell = row.querySelector(`.month-${i}`);
+                    const footerCell = document.getElementById(`footer-month-${i}`);
+                    
+                    if (cell && footerCell) {
+                        // Check: Was this item active this specific month?
+                        const currentMonthDate = new Date(viewYear, i, 1);
+                        const nextMonthDate = new Date(viewYear, i + 1, 1);
+                        
+                        let isActiveThisMonth = false;
+                        
+                        // Check: did it start before the end of this month 
+                        // AND (is it still ongoing OR did it end after the start of this month)?
+                        if (start < nextMonthDate && (!end || end >= currentMonthDate)) {
+                            isActiveThisMonth = true;
+                        }
+
+                        let monthlyImpact = 0;
+                        if (isActiveThisMonth) {
+                            if (frequency === 'Monthly') monthlyImpact = amt;
+                            else if (frequency === 'One-Time' || frequency === 'Quarterly' || frequency === 'Annual') {
+                                if (start.getMonth() === i) {
+                                    monthlyImpact = amt;
+                                }
+                            }
+                        }
+
+                        // Update row cell
+                        const currentCellVal = parseFloat(cell.getAttribute('data-value')) || 0;
+                        const newCellVal = currentCellVal - monthlyImpact;
+                        
+                        cell.setAttribute('data-value', newCellVal.toFixed(2));
+                        cell.innerText = Math.abs(newCellVal) < 0.01 ? '-' : newCellVal.toFixed(2);
+                        
+                        totalRowValueForYear += Math.abs(newCellVal);
+
+                        // Update footer cell
+                        let currentFooterVal = parseFloat(footerCell.innerText.replace(/[€\s,]/g, '')) || 0;
+                        const newFooterVal = currentFooterVal - monthlyImpact;
+                        
+                        footerCell.innerText = `€ ${newFooterVal.toFixed(2)}`;
+                        footerCell.style.color = newFooterVal >= 0 ? 'green' : 'red';
+                    }
+                }
+
+                // Fade out if empty
+                if (totalRowValueForYear < 0.01) {
+                    row.classList.add('row-fade-out');
+                    setTimeout(() => row.remove(), 400);
+                }
+            }
+            
+            // Update price logic
+            document.querySelectorAll('.update-btn').forEach(button => {
+                button.addEventListener('click', function(event) {
+                    // Look for the closest update button
+                    const updateBtn = event.currentTarget;
+                    if (!updateBtn) return;
+                    
+                    console.log("Update button clicked");
+
+                    // Extract data from the button's attributes
+                    const entryId   = updateBtn.getAttribute('data-id');
+                    const desc      = updateBtn.getAttribute('data-description');
+                    const amt       = updateBtn.getAttribute('data-amount');
+                    const cat       = updateBtn.getAttribute('data-category');
+                    const freq      = updateBtn.getAttribute('data-frequency');
+                    const date      = updateBtn.getAttribute('data-date');
+                    
+                    console.log("Data extracted")
+
+                    // Reference the form elements
+                    const form      = document.getElementById('cashflow-form');
+                    const formTitle = document.getElementById('form-title');
+                    const addBtn    = document.getElementById('add-transaction-btn');
+                    const submitBtn = document.getElementById('submit-button');
+                    
+                    console.log("Elements referenced")
+
+                    // Check: if form doesn't exist, stop here so we don't crash
+                    if (!form) {
+                        console.error("Form with ID 'cashflow-form' not found!");
+                        return;
+                    }
+                    
+                    console.log("Check passed")
+
+                    // Fill the form fields
+                    document.getElementById('item_description').value = desc;
+                    document.getElementById('amount_eur').value = Math.abs(parseFloat(amt)); 
+                    document.getElementById('category').value = cat;
+                    document.getElementById('frequency').value = freq;
+                    document.getElementById('entry_date').value = date;
+                    
+                    console.log("Forms filled")
+
+                    // Update UI to "Update Mode"
+                    formTitle.innerText = "Update Transaction: " + desc;
+                    if (submitBtn) submitBtn.innerText = "Update Transaction";
+                    
+                    form.style.display = 'block';
+                    addBtn.style.display = 'none';
+                    
+                    console.log("UI updated")
+
+                    // Change the action to point to the update route
+                    form.action = `/update_cashflow_entry/${entryId}`;
+                    
+                    console.log("Route updated")
+                    
+                    form.scrollIntoView({ behavior: 'smooth' });
+                    
+                    console.log("End of function")
+                });
+            });
+        });
+        
+        function changeMonth(delta) {
+            const input = document.getElementById('month-input');
+            let [year, month] = input.value.split('-').map(Number);
+            
+            // Create a date object (set to day 15 to avoid month-end rollover issues)
+            let d = new Date(year, month - 1 + delta, 15);
+            
+            // Format back to YYYY-MM
+            let newYear = d.getFullYear();
+            let newMonth = String(d.getMonth() + 1).padStart(2, '0');
+            
+            input.value = `${newYear}-${newMonth}`;
+            document.getElementById('nav-form').submit();
+        }
+    </script>
+</body>

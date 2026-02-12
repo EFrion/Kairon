@@ -1,0 +1,219 @@
+<!doctype html>
+<head>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<title>{{ title }}</title>
+
+<body>
+    <div class="nav">
+        <a href="/cashflow">Cash Flow</a>
+        <a href="/portfolio">Portfolio Metrics</a>
+        <a href="/test">Optimisation & Backtesting</a>
+    </div>
+
+    <h1>{{ title }}</h1>
+    
+    <div class="stats-page-layout">
+        <div class="table-chart-container">
+            <table id="ticker-sidebar-table">
+                <thead>
+                    <tr>
+                        <th style="background-color: #007BFF; color: white; padding: 10px;">Tickers</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in tickers %}
+                    <tr class="ticker-row {% if t == selected_ticker %}active-ticker{% endif %}" 
+                        data-ticker="{{ t }}" 
+                        style="cursor: pointer;">
+                        <td>
+                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 5px;">
+                                <b>{{ t }}</b>
+                                <span class="indicator">{% if t == selected_ticker %}▶{% endif %}</span>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="total-row">
+                        <td>Total: {{ tickers|length }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <div class="chart-container">
+            <div class="analysis-tabs" style="display: flex; border-bottom: 1px solid #ddd; background: #f8f9fa;">
+                <div class="tab active-tab" data-mode="price" style="padding: 10px 20px; cursor: pointer; border-right: 1px solid #ddd;">Price Chart</div>
+                <div class="tab" data-mode="returns" style="padding: 10px 20px; cursor: pointer; color: #888; border-right: 1px solid #ddd;">Log Returns</div>
+                <div class="tab" data-mode="map-2dcorr" style="padding: 10px 20px; cursor: pointer; color: #888;">2D correlation</div>
+                <div class="tab" data-mode="sentiment" style="padding: 10px 20px; cursor: pointer; color: #888;">Sentiment (Soon)</div>
+            </div>
+            
+            <div id="history-controls" style="padding-right: 10px; font-size: 0.85em;">
+                <label for="start-date">Backfill to:</label>
+                <input type="date" id="start-date" name="start-date" style="font-size: 0.9em;">
+                <button id="expand-btn" style="padding: 2px 8px; cursor: pointer; background: #007BFF; color: white; border: none; border-radius: 3px;">Expand</button>
+            </div>
+        
+            <h2 id="chart-title" style="margin: 0; padding:20px;">{{ selected_ticker }}</h2>
+            <div id="price-plot-container">
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            let currentTicker = "{{ selected_ticker }}";
+            let secondaryTicker = "";
+            let currentMode = "price"; // Default mode
+
+            const tabs = document.querySelectorAll('.tab');
+            const tickerRows = document.querySelectorAll('.ticker-row');
+
+            updateView();
+            
+            function updateView() {
+                // Here we update the fetch URL to include the mode
+                // Example: /get_plot?ticker=AAPL&mode=price
+                document.getElementById('chart-title').innerText = currentTicker;
+                
+                console.log(`Fetching ${currentMode} for ${currentTicker}`);
+                
+                let url = `/get_plot?ticker=${currentTicker}&mode=${currentMode}`;
+                
+                if (currentMode === 'map-2dcorr' && secondaryTicker) {
+                    url += `&ticker2=${secondaryTicker}`;
+                }
+                
+                const container = document.getElementById('price-plot-container');
+                
+                fetch(url)
+                    .then(response => response.json())
+                    .then(figData => {
+                        // Plotly.react updates an existing plot if it's there.
+                        Plotly.react(container, figData.data, figData.layout);
+                    })
+                    .catch(err => {
+                        console.error("Plotly Error:", err);
+                        container.innerHTML = '<p style="color:red;">Error loading chart.</p>';
+                    });
+            }
+
+            // Tab click logic
+            tabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    // Manage tab classes
+                    tabs.forEach(t => t.classList.remove('active-tab'));
+                    this.classList.add('active-tab');
+                    
+                    // Update global mode
+                    currentMode = this.dataset.mode;
+                    
+                    // If switching to correlation, ensure there's a partner stock
+                    if (currentMode === 'map-2dcorr' && !secondaryTicker) {
+                        // Find the first ticker in the sidebar that isn't the current primary one
+                        const firstOtherRow = [...tickerRows].find(r => r.dataset.ticker !== currentTicker);
+                        if (firstOtherRow) {
+                            secondaryTicker = firstOtherRow.dataset.ticker;
+                        } else {
+                            // Fallback if there's only one ticker in the database
+                            secondaryTicker = currentTicker;
+                        }
+                    }
+                    
+                    refreshSidebarUI();
+                    updateView();
+                });
+            });
+
+            // Ticker click logic
+            tickerRows.forEach(row => {
+                row.addEventListener('click', function() {
+                    const clickedTicker = this.dataset.ticker;
+                    
+                    if (currentMode === 'map-2dcorr') {
+                        // If the user clicks a ticker that isn't the primary one, set it as the secondary (yellow) ticker.
+                        if (clickedTicker === currentTicker) {
+                            return;
+                        }
+                        secondaryTicker = clickedTicker;
+                    } else {
+                        // Just update the primary ticker.
+                        currentTicker = clickedTicker;
+                    }
+                    
+                    refreshSidebarUI();
+                    updateView();
+                });
+            });
+            
+            function refreshSidebarUI() {
+                // Update the chart title
+                const titleElement = document.getElementById('chart-title');
+                if (currentMode === 'map-2dcorr' && secondaryTicker) {
+                    titleElement.innerText = `${currentTicker} vs ${secondaryTicker}`;
+                } else {
+                    titleElement.innerText = currentTicker;
+                }
+
+                // Manage highlighting and indicators for every row
+                tickerRows.forEach(row => {
+                    const rowTicker = row.dataset.ticker;
+                    const indicator = row.querySelector('.indicator');
+
+                    // Reset everything first
+                    row.classList.remove('active-ticker', 'secondary-ticker');
+                    if (indicator) indicator.innerText = '';
+
+                    // Apply primary (blue)
+                    if (rowTicker === currentTicker) {
+                        row.classList.add('active-ticker');
+                        if (indicator) indicator.innerText = '▶';
+                    } 
+                    // Apply secondary (yellow)
+                    else if (currentMode === 'map-2dcorr' && rowTicker === secondaryTicker) {
+                        row.classList.add('secondary-ticker');
+                        if (indicator) indicator.innerText = 'II'; // Using 'II' to show it's the 2nd asset
+                    }
+                });
+            }
+            
+            document.getElementById('expand-btn').addEventListener('click', function() {
+                const startDate = document.getElementById('start-date').value;
+                if (!startDate) {
+                    alert("Please select a date first.");
+                    return;
+                }
+
+                const ticker = currentTicker; // Use the global currentTicker
+                const btn = this;
+                const originalText = btn.innerText;
+                
+                btn.innerText = "Downloading...";
+                btn.disabled = true;
+
+                // Call a new Flask route we'll create below
+                fetch(`/expand_history?ticker=${ticker}&start=${startDate}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        alert(data.message);
+                        btn.innerText = originalText;
+                        btn.disabled = false;
+                        // Refresh the current plot to show the new longer history
+                        updateView(); 
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        btn.innerText = "Error";
+                        btn.disabled = false;
+                    });
+            });
+        });
+        
+    </script>
+</body>
+

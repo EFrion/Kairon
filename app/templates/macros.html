@@ -1,0 +1,384 @@
+{# templates/macros.html #}
+
+
+{% macro asset_table(title, assets, share_counts, avg_buy_prices, total_market_value, type, total_cost_basis, monthly_payment_counts, portfolio_yield, portfolio_div_growth, annual_dividends, env, soc, gov, cont) %}
+<h2>{{ title }}</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Ticker</th>
+            <th>Shares</th>
+            <th>Avg Price</th>
+            <th>Value (EUR)</th>
+            <th>Quote</th>
+            <th>Quote (EUR)</th>
+            <th>Weight</th>
+            {# Only show stock-specific headers if it's the stocks table #}
+            {% if type == 'stocks' %}
+                <th>P/E</th>
+                <th>Fwd P/E</th>
+                <th>P/B</th>
+                <th>PEG</th>
+                <th>Earnings Growth Rate</th>
+                <th>Div. Yield</th>
+                <th>Div. CAGR</th>
+                <th>Payout Ratio</th>
+                <th>E</th>
+                <th>S</th>
+                <th>G</th>
+                <th>Cont.</th>
+                <th>Latest Div. (EUR)</th>
+                <th>Months Paid (TTM)</th>
+                <th>Annual Div. (TTM)</th>
+                <th>Base Currency</th>
+                <th>Sector</th>
+            {% endif %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for asset in assets %}
+        <tr id="row-{{ asset.Ticker }}">
+            {% set index = loop.index %}
+            <td>
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <span>
+                        <b>{{ asset.Ticker }}</b>
+                        <input type="hidden" name="tickers" value="{{ asset.Ticker }}">
+                    </span>
+                    
+                    <button class="delete-btn" 
+                            data-id="{{ asset.Ticker }}" 
+                            style="color: #ff4d4d; cursor: pointer; border: none; background: none; font-size: 14px; padding: 0 5px;"
+                            title="Remove {{ asset.Ticker }}">
+                        🗑️
+                    </button>
+                </div>
+            </td>
+            
+            <td>
+                {% set current_shares = share_counts.get(asset.Ticker, 0) %}
+                <input type="text" 
+                       name="shares_{{ asset.Ticker }}" 
+                       value="{{ current_shares }}" 
+                       min="0"
+                       style="width: 70px; text-align: center;"
+                       id="shares_{{ asset.Ticker }}"
+                       data-price="{{ asset.Quote_EUR|default(0) }}"
+                       data-latest-div="{{ asset.Latest_Div_EUR|default(0) }}"
+                       data-frequency="{{ asset.Months_Paid|sum }}"
+                       oninput="calculateValue('{{ asset.Ticker }}');"
+                       onkeydown="handleEnterKey(event);">
+            </td>
+                 
+            <td>
+                {% set current_price = avg_buy_prices.get(asset.Ticker, 0) %}
+                <input  type="text"
+                        name="price_{{ asset.Ticker }}" 
+                        id="price_{{ asset.Ticker }}"
+                        value="{{ current_price|round(4) }}"
+                        min="0"
+                        style="width: 70px; text-align: center;"
+                        onkeydown="handleEnterKey(event);">
+            </td>
+            
+            {% set quote_eur = asset.Quote_EUR|default(0) %}
+            
+            {% set market_value_raw = quote_eur * current_shares %}
+            {% set market_value_display = market_value_raw|smart_price %}
+            <td id="value_{{ asset.Ticker }}" data-market-value="{{ market_value_raw if quote_eur is number and current_shares is number else 0 }}">
+                {% if quote_eur is number and current_shares is number %}
+                    {{market_value_display}} €
+                {% else %}
+                    0.0
+                {% endif %}
+            </td>
+            
+            <td>{{asset.Quote|default(0.0, true)|smart_price}}</td>
+            
+            <td>{{asset.Quote_EUR|default(0.0, true)|smart_price}} €</td>
+            
+            {% set bg_class_pe = determine_color_class(pe_ratio, 10, 20, direction='low_is_better') %}
+            {% set individual_value = (asset.Quote_EUR|default(0)| float * share_counts.get(asset.Ticker, 0) | float) %}
+            {# Calculate weight (Individual Value / Total Value) * 100 #}
+            {% set initial_weight = (individual_value / total_market_value) * 100 if total_market_value and total_market_value > 0 else 0 %}
+            {% set bg_class_weight = determine_color_class(initial_weight, 4, 5, direction='low_is_better') if type == 'stocks' else '' %}
+            <td class="weight-display monitor-status {{ bg_class_weight }}"
+                id="weight_{{ asset.Ticker}}"
+                data-ticker="{{ asset.Ticker }}"
+                data-metric="Weight">
+                {{ initial_weight| smart_weight }} %
+            </td>
+            
+                
+            {% if type == 'stocks' %}
+                {% set pe_ratio = asset['P/E'] %}
+                {% set bg_class_pe = determine_color_class(pe_ratio if pe_ratio>0 else 99, 10, 20, direction='low_is_better') %}
+                <td class="monitor-status {{ bg_class_pe }}"
+                    id="pe_ratio_{{ asset.Ticker }}"
+                    data-ticker="{{ asset.Ticker }}"
+                    data-metric="P/E ratio">
+                    {{ pe_ratio }}
+                </td>
+                
+                {% set pe_ratio_forward = asset['Fwd_P/E'] %}
+                {% set bg_class_pe_forward = determine_color_class(pe_ratio_forward if pe_ratio_forward>0 else 99, 10, 20, direction='low_is_better') %}
+                <td class="monitor-status {{ bg_class_pe_forward }}"
+                    id="fwd_pe_ratio_{{ asset.Ticker }}"
+                    data-ticker="{{ asset.Ticker }}"
+                    data-metric="Forward P/E ratio">
+                    {{ pe_ratio_forward }}
+                </td>
+                
+                {% set pb_ratio = asset['P/B'] |float(0) %}
+                {% set bench = asset.get('Sector_PB_Benchmark') | float(0) %}
+                {% set bg_class_pb = determine_color_class(pb_ratio, bench, bench, direction='low_is_better') %}
+                <td class="monitor-status {{ bg_class_pb }}"
+                    id="pb_ratio_{{ asset.Ticker }}"
+                    data-ticker="{{ asset.Ticker }}"
+                    data-metric="P/B ratio">
+                    {{ pb_ratio }}
+                </td>
+                
+                {% set peg_ratio = asset.PEG %}
+                {% set bg_class_peg = determine_color_class(peg_ratio if peg_ratio>0 else 99, 0.9, 1, direction='low_is_better') %}
+                <td class="{{ bg_class_peg }}" >{{ peg_ratio }}</td>
+                
+                {% set earnings_gr = asset.Earnings_Growth %}
+                {% set bg_class_eg = determine_color_class(earnings_gr, 0, 0, direction='high_is_better') %}
+                <td class="{{ bg_class_eg }}" >
+                {% if earnings_gr is number %}
+                    {{ (earnings_gr * 100)|smart_price }}%
+                {% else %}
+                    {{ earnings_gr }}
+                {% endif %}
+                </td>
+
+                {% set div_yield = asset.Div_Yield %}
+                {% set bg_class_yield = determine_color_class(div_yield, 0.02, 0.04, direction='high_is_better') %}
+                <td class="{{ bg_class_yield }}">
+                    {% if div_yield is number %}
+                        {{ (div_yield * 100)|smart_price }}%
+                    {% else %}
+                        {{ div_yield }}
+                    {% endif %}
+                </td>
+                
+                {% set div_cagr = asset.Div_CAGR %}
+                {% set bg_class_cagr = determine_color_class(div_cagr, 0.04, 0.08, direction='high_is_better') %}
+                <td class="{{ bg_class_cagr }}">
+                    {% if div_cagr is number %}
+                        {{ (div_cagr* 100)|smart_price }}%
+                    {% else %}
+                        {{ div_cagr }}
+                    {% endif %}
+                </td>
+                
+                {% set payout = asset.PayoutRatio %}
+                {% set bg_class_payout = determine_color_class(payout, 0.9, 1, direction='low_is_better') %}
+                <td class="{{ bg_class_payout }}">
+                    {% if payout is number %}
+                        {{ (payout*100)|smart_price }}%
+                    {% else %}
+                        0.0
+                    {% endif %}
+                </td>
+                
+                {% set current_env = env.get(asset.Ticker, 0) %}
+                {% set bg_class_env = determine_color_class(current_env, 4, 6, direction='high_is_better') %}
+                <td class="{{ bg_class_env }}">
+                    <input  type="number"
+                            name="env_{{ asset.Ticker }}" 
+                            id="env_{{ asset.Ticker }}"
+                            value="{{ current_env }}"
+                            min="0"
+                            max="10"
+                            style="width: 30px; text-align: center;"
+                            onkeydown="handleEnterKey(event);">
+                </td>
+                
+                {% set current_soc = soc.get(asset.Ticker, 0) %}
+                {% set bg_class_soc = determine_color_class(current_soc, 4, 6, direction='high_is_better') %}
+                <td class="{{ bg_class_soc }}">
+                    <input  type="text"
+                            name="soc_{{ asset.Ticker }}" 
+                            id="soc_{{ asset.Ticker }}"
+                            value="{{ current_soc }}"
+                            min="0"
+                            max="10"
+                            style="width: 30px; text-align: center;"
+                            onkeydown="handleEnterKey(event);">
+                </td>
+                
+                {% set current_gov = gov.get(asset.Ticker, 0) %}
+                {% set bg_class_gov = determine_color_class(current_gov, 4, 6, direction='high_is_better') %}
+                <td class="{{ bg_class_gov }}">
+                    <input  type="text"
+                            name="gov_{{ asset.Ticker }}" 
+                            id="gov_{{ asset.Ticker }}"
+                            value="{{ current_gov }}"
+                            min="0"
+                            max="10"
+                            style="width: 30px; text-align: center;"
+                            onkeydown="handleEnterKey(event);">
+                </td>
+                
+                {% set current_cont = cont.get(asset.Ticker, 0) %}
+                {% set bg_class_cont = determine_color_class(current_cont, 4, 6, direction='high_is_better') %}
+                <td class="{{ bg_class_cont }}">
+                    <input  type="text"
+                            name="cont_{{ asset.Ticker }}" 
+                            id="cont_{{ asset.Ticker }}"
+                            value="{{ current_cont }}"
+                            min="0"
+                            max="10"
+                            style="width: 30px; text-align: center;"
+                            onkeydown="handleEnterKey(event);">
+                </td>
+                
+                {% set latest_div = asset.Latest_Div_EUR|default(0.0, true)| float|round(4) %}
+                <td>
+                    {% if latest_div is number %}
+                        {{ latest_div|smart_price }} €
+                    {% else %}
+                        0.0
+                    {% endif %}
+                </td>
+
+                {% set months = ['J', 'F', 'M', 'A', 'M', 'J', 'Jl', 'A', 'S', 'O', 'N', 'D'] %}
+                <td class="month-visualizer-cell">
+                    <div class="month-container month-container-data">
+                        {% for month_status in asset.Months_Paid %}
+                            {% set month_initial = months[loop.index0] %}
+                            
+                            <span class="month-data-item {% if month_status == 1 %}paid{% endif %}">
+                                {% if month_status == 1 %}
+                                    {{ month_initial }}
+                                {% else %}
+                                    &nbsp; 
+                                {% endif %}
+                            </span>
+                        {% endfor %}
+                    </div>
+                </td>
+                
+                {% set payment_frequency = asset.Months_Paid|sum %}
+                {% set annual_dividend = latest_div * payment_frequency * current_shares %}
+                <td id="annual_div_{{ asset.Ticker }}">
+                    {% if latest_div is number and payment_frequency is number and current_shares is number %}
+                        {{ annual_dividend|smart_price }} €
+                    {% else %}
+                        0.0
+                    {% endif %}
+                </td>
+                
+                <td>{{ asset.Currency }}</td>
+                
+                <td>{{ asset.Sector }}</td>
+            {% endif %}
+        </tr>
+        {% endfor %}
+    </tbody>
+    
+    <tfoot>
+        <tr class="total-row">
+            
+            <td colspan="1" style="font-weight: bold;">TOTAL PORTFOLIO</td>
+            
+            <td colspan="1"></td>
+            
+            <td style="text-align: center; font-weight: bold;" id="total-cost-basis-{{ type }}">
+                {{ total_cost_basis|smart_price if total_cost_basis is number else '0.00' }} €
+            </td>
+            
+            <td style="text-align: center; font-weight: bold;" id="total-market-value-{{ type }}">
+                {{ total_market_value|smart_price if total_market_value is number else '0.00' }} €
+            </td>
+            
+            {% if type == 'stocks' %}
+            <td colspan="8"></td> 
+            
+            {% set total_yield_class = determine_color_class(portfolio_yield, 0.02, 0.04, direction='high_is_better') %}
+            <td id="portfolio-yield-display" class="{{ total_yield_class }}">
+                {{ (portfolio_yield * 100) | smart_price }}%
+            </td>
+            
+            {% set total_div_growth_class = determine_color_class(portfolio_div_growth, 0.04, 0.08, direction='high_is_better') %}
+            <td id="portfolio-div-growth-display" class="{{ total_div_growth_class }}">
+                {{ (portfolio_div_growth * 100) | smart_price }}%
+            </td>
+            
+            <td colspan="6"></td> 
+            
+            {% set months = ['J', 'F', 'M', 'A', 'M', 'J', 'Jl', 'A', 'S', 'O', 'N', 'D'] %}
+            <td class="month-visualizer-cell total-month-counts">
+                <div class="month-container month-container-data footer-stack" id="total-month-counts-display">
+                
+                    <div class="month-label-row">
+                        {% for month_initial in months %}
+                            <span class="month-label-item">{{ month_initial }}</span>
+                        {% endfor %}
+                    </div>
+                
+                    <div class="month-data-row" id="total-month-data-row">
+                        {% for count in monthly_payment_counts|default([]) %}
+                            <span class="month-data-item total-count-item {% if count > 0 %}paid{% endif %}">
+                                {{ count }}
+                            </span>
+                        {% endfor %}
+                    </div>
+                </div>
+            </td>
+            
+            <td id="annual-dividends">
+                {{ annual_dividends | smart_price }} €
+            </td>
+            
+            <td colspan="2"></td> 
+            {% endif %}
+            
+            {% if type == 'crypto' %}
+            <td colspan="3"></td> 
+            {% endif %}
+        </tr>
+    </tfoot>
+</table>
+{% endmacro %}
+
+
+{% macro determine_color_class(value, low_threshold, high_threshold, direction='high_is_better') %}
+    {# 
+        Args:
+        - value: The metric's numeric value (e.g., 0.03 for 3% yield)
+        - low_threshold: The lowest boundary for the 'bad' color (e.g., 0.02)
+        - high_threshold: The lowest boundary for the 'good' color (e.g., 0.04)
+        - direction: 'high_is_better' (Green > Orange > Red) or 'low_is_better' (Red > Orange > Green)
+    #}
+    
+    {% set class_name = "" %}
+    {% if value is number %}
+        
+        {# --- Logic for High is Better --- #}
+        {% if direction == 'high_is_better' %}
+            {% if value < low_threshold %}
+                {% set class_name = "bg-red" %}
+            {% elif value <= high_threshold %}
+                {% set class_name = "bg-orange" %}
+            {% else %}
+                {% set class_name = "bg-green" %}
+            {% endif %}
+            
+        {# --- Logic for Low is Better --- #}
+        {% elif direction == 'low_is_better' %}
+            {% if value > high_threshold %}
+                {% set class_name = "bg-red" %}
+            {% elif value >= low_threshold %}
+                {% set class_name = "bg-orange" %}
+            {% else %}
+                {% set class_name = "bg-green" %}
+            {% endif %}
+        {% endif %}
+
+    {% endif %}
+
+    {{ class_name }}
+{% endmacro %}
