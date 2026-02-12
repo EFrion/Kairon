@@ -455,7 +455,7 @@ def fetch_latest_metrics(tickers_list, category_name='assets', test=False, requi
         #print("hist_prices: ", hist_prices.tail(5))
         if not hist_prices.empty:
             # Determine the existing range of cached data
-            first_datetime = hist_prices.index[0]
+            first_datetime = hist_prices.index[0].tz_localize(None)
             last_datetime = hist_prices.index[-1]
             print("Last update time from price history: ", last_datetime)
     else:
@@ -467,24 +467,26 @@ def fetch_latest_metrics(tickers_list, category_name='assets', test=False, requi
     current_tz = None
     if isinstance(hist_prices.index, pd.DatetimeIndex):
         current_tz = hist_prices.index.tz
-        #print("current_tz: ", current_tz)
+        print("current_tz: ", current_tz)
     
     # Check if historical prices are needed
     if target_start_date:
-        target_ts = pd.to_datetime(target_start_date)
-        #print("target_ts: ", target_ts)
+        target_ts = pd.to_datetime(target_start_date).tz_localize(None)
+        print("target_ts: ", target_ts)
    
         # Ensure timezones match
         if current_tz:
+            print("Yes current tz")
             target_ts = target_ts.tz_localize(current_tz)
-            #print("target_ts2: ", target_ts)
+            print("target_ts2: ", target_ts)
             if first_datetime:
-                first_datetime = first_datetime.tz_convert(current_tz)
+                first_datetime = first_datetime.tz_localize(current_tz)
         else:
+            print("No current tz")
             target_ts = target_ts.tz_localize('UTC')
-            #print("target_ts2: ", target_ts)
+            print("target_ts2: ", target_ts)
             if first_datetime:
-                first_datetime = first_datetime.tz_convert('UTC')
+                first_datetime = first_datetime.tz_localize('UTC')
             
         #print("target_ts: ", target_ts)
         #print("first_datetime: ", first_datetime)

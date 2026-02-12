@@ -169,7 +169,8 @@ def get_plot():
     #print("mode: ", mode)
 
     # Load data. TODO data persistence?
-    stocks_data_path = "data/stocks_price_history_1d.csv"
+    cache_dir = current_app.config['DATA_FOLDER']
+    stocks_data_path = os.path.join(cache_dir, "stocks_price_history_1d.csv")
     stocks_data = pd.read_csv(stocks_data_path, index_col='Datetime', parse_dates=True)
     
     #print("columns passed:", stocks_data[[ticker]].columns)
@@ -203,8 +204,8 @@ def expand_history():
     """
     # Only for stocks at the moment
     #ticker_list = get_assets(asset_type)
-    
-    stocks_data_path = f"data/stocks_price_history_1d.csv"
+    cache_dir = current_app.config['DATA_FOLDER']
+    stocks_data_path = os.path.join(cache_dir, "stocks_price_history_1d.csv")
     stocks_data = pd.read_csv(stocks_data_path, index_col='Datetime', parse_dates=True)
     tickers = sorted(stocks_data.columns.tolist())
     
