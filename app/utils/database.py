@@ -4,6 +4,8 @@ from flask import current_app
 
 def init_db():
     database_dir = current_app.config['DATABASE_FOLDER']
+    
+    os.makedirs(database_dir, exist_ok=True)
     db_path = os.path.join(database_dir, 'finance_app.db')
     
     #print("db_path: ", db_path)
