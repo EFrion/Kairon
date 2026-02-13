@@ -52,10 +52,10 @@
         <tfoot>
             <tr class="total-row">
                 <td style="font-weight: bold;">NET CASH FLOW</td>
-                <td class="text-right" style="font-weight: bold; color: {{ 'green' if metrics.total_net_monthly >= 0 else 'red' }};">
+                <td class="text-right" style="font-weight: bold; color: {{ '#7cfc00' if metrics.total_net_monthly >= 0 else '#e8000d' }};">
                     € {{ metrics.total_net_monthly|round(2) }}
                 </td>
-                <td class="text-right" style="font-weight: bold; color: {{ 'green' if metrics.total_net_annual >= 0 else 'red' }};">
+                <td class="text-right" style="font-weight: bold; color: {{ '#7cfc00' if metrics.total_net_annual >= 0 else '#e8000d' }};">
                     € {{ metrics.total_net_annual|round(2) }}
                 </td>
             </tr>

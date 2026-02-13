@@ -223,6 +223,7 @@
             
             // Only select value cells within the specific section (stocks or crypto)
             const section = document.getElementById(`${assetType}-section`);
+            //console.log("section: ", section);
             if (!section) return;
             
             // Find all weight display elements only within this section
@@ -770,6 +771,7 @@
                 input.addEventListener('change', () => { // Change for persistent saving when focus is lost/value is finalised.
                     calculateValue(index); // Update the visual row first
                     saveSingleValue(input, index, input.value); // Save to database
+                    createPieCharts();
                 });
             });
             
