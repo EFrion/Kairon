@@ -14,3 +14,4 @@ The balance sheet contains all incomes and expenses over the year.
 The portfolio monitoring gathers all long positions that you have. It shows various equity metrics (P/E, PEG, dividends, etc...) and how diversified you are accross assets. There is a colour code according to the GARP investing strategy.
 
 The research dashboard contains several features used for understanding your assets: historical prices with SMAs, log return distributions, correlations.
+
