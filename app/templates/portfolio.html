@@ -313,11 +313,16 @@
                     const updateColor = (input) => {
                         if (!input) return;
                         const val = parseInt(input.value) || 0;
-                        input.classList.remove('bg-red', 'bg-orange', 'bg-green');
                         
-                        if (val < 4) input.classList.add('bg-red');
-                        else if (val < 7) input.classList.add('bg-orange');
-                        else input.classList.add('bg-green');
+                        // Find the parent cell
+                        const parentCell = input.closest('td');
+                        if (!parentCell) return;
+                        
+                        parentCell.classList.remove('bg-red', 'bg-orange', 'bg-green');
+                        
+                        if (val < 4) parentCell.classList.add('bg-red');
+                        else if (val < 7) parentCell.classList.add('bg-orange');
+                        else parentCell.classList.add('bg-green');
                     };
                     updateColor(envInputUpdate);
                     updateColor(socInputUpdate);
