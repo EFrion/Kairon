@@ -14,6 +14,8 @@ def test_feature():
     # TODO focus on stocks for now, add a general function later
     
     stocks_data = None
+    tickers_1d = None
+    tickers_4h = None
     
     cache_dir = current_app.config['DATA_FOLDER']
     
@@ -21,9 +23,9 @@ def test_feature():
 
     stocks_data_path_fallback = os.path.join(cache_dir, 'stocks_price_history_4h.csv')
     stocks_data_path = os.path.join(cache_dir, 'stocks_price_history_1d.csv')
-    crypto_data_path = os.path.join(cache_dir, 'crypto_price_history_1d.csv')
+    #crypto_data_path = os.path.join(cache_dir, 'crypto_price_history_1d.csv')
     
-    print("stocks_data_path: ", stocks_data_path)
+    #print("stocks_data_path: ", stocks_data_path)
 
     # Check if we have local data
     if os.path.exists(stocks_data_path) and os.path.getsize(stocks_data_path) > 0:
@@ -42,6 +44,16 @@ def test_feature():
             
         tickers = sorted(stocks_data_fallback.columns.tolist())
         print("tickers: ", tickers)
+    
+    # If there is no daily data yet, we take the tickers downloaded when we opened the portolio page
+    if not tickers_1d:
+        tickers_1d = tickers_4h
+        download_start = stocks_data_fallback.index.min()
+        finance_data.fetch_latest_metrics(  list(tickers_1d),
+                                            category_name='stocks',
+                                            interval='1d',
+                                            target_start_date=download_start) # Use daily prices here!
+        stocks_data = pd.read_csv(stocks_data_path, index_col='Datetime', parse_dates=True).dropna()
         
     if not tickers_4h.issubset(tickers_1d):
         print("Syncing 1d columns with 4h columns.")
