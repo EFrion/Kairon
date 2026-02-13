@@ -1,4 +1,4 @@
-# Kairon
+# Kairos
 _Last updated: 2026-02-13_
 
 
