@@ -15,3 +15,4 @@ The portfolio monitoring gathers all long positions that you have. It shows vari
 
 The research dashboard contains several features used for understanding your assets: historical prices with SMAs, log return distributions, correlations.
 
+Use ``flask run`` to run it. Make sure all the dependencies in `requirements.txt` are installed in your Python environment.
