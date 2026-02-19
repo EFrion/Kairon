@@ -46,7 +46,6 @@
             
             <h2 style="margin-top: 40px; text-align: center; color: #2ecc71;">Total Portfolio</h2>
             <span id="grand-total-display" style="font-size: 2.5em; font-weight: bold; color: #2ecc71;">
-                {{ total_market_value | round(1) }} €
             </span>
         </div>
 
@@ -264,8 +263,14 @@
         }
 
         // Function to send data to Flask and update the plot
-        function updatePortfolioUI(assetType, ticker) {
-            console.log("updatePortfolioUI called");
+        function updatePortfolioUI(assetType, ticker = null, externalData = null) {
+            console.log(`updatePortfolioUI called for ${assetType}`);
+            
+            if (externalData) {
+                console.log("No external data, fetching data.");
+                processPortfolioResponse(assetType, externalData, ticker);
+                return; 
+            }
             
             // If there's an ongoing request, cancel it
             if (portfolioUpdateController) {
@@ -287,113 +292,7 @@
             })
             .then(response => response.json())
             .then(data => {                
-                // Update category-specific totals
-                const marketValueElem = document.getElementById(`total-market-value-${assetType}`);
-                const costBasisElem = document.getElementById(`total-cost-basis-${assetType}`);
-                
-                //console.log("annDivElem: ", annDivElem);
-                //console.log("annDiv: ", annDiv);
-                
-                if (marketValueElem) marketValueElem.textContent = smartFormat(data.total_market_value);
-                if (costBasisElem) costBasisElem.textContent = smartFormat(data.total_cost_basis);
-                
-                // Asset-specific logic (dividends for stocks only)
-                if (assetType === 'stocks' && ticker) {
-                    const yieldElem = document.getElementById('portfolio-yield-display');
-                    const divGrowthElem = document.getElementById('portfolio-div-growth-display');
-                    const annDivElem = document.getElementById('annual-dividends');
-                    const pyield = data.portfolio_yield;
-                    const growth = data.portfolio_div_growth;
-                    const annDiv = data.annual_dividends;
-                    const envInputUpdate = document.querySelector(`input[name="env_${ticker}"]`);
-                    const socInputUpdate = document.querySelector(`input[name="soc_${ticker}"]`);
-                    const govInputUpdate = document.querySelector(`input[name="gov_${ticker}"]`);
-                    const contInputUpdate = document.querySelector(`input[name="cont_${ticker}"]`);
-                    
-                    const updateColor = (input) => {
-                        if (!input) return;
-                        const val = parseInt(input.value) || 0;
-                        
-                        // Find the parent cell
-                        const parentCell = input.closest('td');
-                        if (!parentCell) return;
-                        
-                        parentCell.classList.remove('bg-red', 'bg-orange', 'bg-green');
-                        
-                        if (val < 4) parentCell.classList.add('bg-red');
-                        else if (val < 7) parentCell.classList.add('bg-orange');
-                        else parentCell.classList.add('bg-green');
-                    };
-                    updateColor(envInputUpdate);
-                    updateColor(socInputUpdate);
-                    updateColor(govInputUpdate);
-                    updateColor(contInputUpdate);
-                
-                    // Update Plotly graph
-                    const plotDiv = document.getElementById('monthly-dividend-plot');
-                    if (plotDiv && data.plot_data) {
-                        const newFigure = JSON.parse(data.plot_data); // Re-parse the figure data from JSON sent by Flask
-                        Plotly.react(plotDiv, newFigure.data, newFigure.layout); // Updates data and layout of the existing plot
-                    }
-
-                    // Update monthly payment counts
-                    const dataRow = document.getElementById('total-month-data-row');
-    
-                    if (dataRow && data.monthly_payment_counts) {
-                        dataRow.innerHTML = ''; // Clears only the spans, not the labels above them
-                        
-                        data.monthly_payment_counts.forEach(count => {
-                            const span = document.createElement('span');
-                            // Add 'paid' class if count > 0 to match the Jinja logic
-                            span.className = `month-data-item total-count-item ${count > 0 ? 'paid' : ''}`;
-                            span.textContent = count;
-                            dataRow.appendChild(span);
-                        });
-                    }
-                    
-                    if (annDiv) annDivElem.textContent = smartFormat(annDiv);
-                
-                    if (yieldElem && pyield !== undefined) {                    
-                        // Update text
-                        yieldElem.textContent = (pyield * 100).toFixed(2) + '%';
-
-                        // Update classes without destroying other layout classes
-                        // Remove all possible color classes first
-                        yieldElem.classList.remove('bg-red', 'bg-orange', 'bg-green');
-                        
-                        // Apply the new colour class based on logic
-                        if (pyield < 0.02) {
-                            yieldElem.classList.add('bg-red');
-                        } else if (pyield < 0.04) {
-                            yieldElem.classList.add('bg-orange');
-                        } else {
-                            yieldElem.classList.add('bg-green');
-                        }
-                    }
-                    
-                    if (divGrowthElem && growth!== undefined) {    
-                        divGrowthElem.textContent = (growth * 100).toFixed(2) + '%';
-
-                        divGrowthElem.classList.remove('bg-red', 'bg-orange', 'bg-green');
-                        
-                        if (growth < 0.04) {
-                            divGrowthElem.classList.add('bg-red');
-                        } else if (growth < 0.08) {
-                            divGrowthElem.classList.add('bg-orange');
-                        } else {
-                            divGrowthElem.classList.add('bg-green');
-                        }
-                    }
-                    
-                    createPieCharts(data.sector_labels, data.sector_values);
-                }
-                
-                //console.log("data.total_market_value: ", data.total_market_value);
-                // Recalculate weights for every stock using the new total
-                recalculateWeights(data.total_market_value, assetType);
-                
-                checkStatusChanges();
-                
+                processPortfolioResponse(assetType, data, ticker);
                 portfolioUpdateController = null;
             })                
             .catch(error => {
@@ -406,28 +305,137 @@
             });
         }
         
-        function createPieCharts(sectorLabels, sectorValues) {
+        function processPortfolioResponse(assetType, data, ticker) {
+            console.log('processPortfolioResponse: ', assetType);
+            // Update category-specific totals
+            const marketValueElem = document.getElementById(`total-market-value-${assetType}`);
+            const costBasisElem = document.getElementById(`total-cost-basis-${assetType}`);
+                        
+            if (marketValueElem) marketValueElem.textContent = smartFormat(data.totals.total_market_value);
+            if (costBasisElem) costBasisElem.textContent = smartFormat(data.totals.total_cost_basis);
+            
+            // Asset-specific logic (dividends for stocks only)
+            if (assetType === 'stocks') {
+                const yieldElem = document.getElementById('portfolio-yield-display');
+                const divGrowthElem = document.getElementById('portfolio-div-growth-display');
+                const annDivElem = document.getElementById('annual-dividends');
+                const pyield = data.portfolio_yield;
+                const growth = data.portfolio_div_growth;
+                const annDiv = data.annual_dividends;
+                const envInputUpdate = document.querySelector(`input[name="env_${ticker}"]`);
+                const socInputUpdate = document.querySelector(`input[name="soc_${ticker}"]`);
+                const govInputUpdate = document.querySelector(`input[name="gov_${ticker}"]`);
+                const contInputUpdate = document.querySelector(`input[name="cont_${ticker}"]`);
+                
+                const updateColor = (input) => {
+                    if (!input) return;
+                    const val = parseInt(input.value) || 0;
+                    
+                    // Find the parent cell
+                    const parentCell = input.closest('td');
+                    if (!parentCell) return;
+                    
+                    parentCell.classList.remove('bg-red', 'bg-orange', 'bg-green');
+                    
+                    if (val < 4) parentCell.classList.add('bg-red');
+                    else if (val < 7) parentCell.classList.add('bg-orange');
+                    else parentCell.classList.add('bg-green');
+                };
+                updateColor(envInputUpdate);
+                updateColor(socInputUpdate);
+                updateColor(govInputUpdate);
+                updateColor(contInputUpdate);
+            
+                // Update Plotly graph
+                const plotDiv = document.getElementById('monthly-dividend-plot');
+                if (plotDiv && data.plot_data) {
+                    const newFigure = JSON.parse(data.plot_data); // Re-parse the figure data from JSON sent by Flask
+                    Plotly.react(plotDiv, newFigure.data, newFigure.layout); // Updates data and layout of the existing plot
+                }
+
+                // Update monthly payment counts
+                const dataRow = document.getElementById('total-month-data-row');
+
+                if (dataRow && data.monthly_payment_counts) {
+                    dataRow.innerHTML = ''; // Clears only the spans, not the labels above them
+                    
+                    data.monthly_payment_counts.forEach(count => {
+                        const span = document.createElement('span');
+                        // Add 'paid' class if count > 0 to match the Jinja logic
+                        span.className = `month-data-item total-count-item ${count > 0 ? 'paid' : ''}`;
+                        span.textContent = count;
+                        dataRow.appendChild(span);
+                    });
+                }
+                
+                if (annDiv) annDivElem.textContent = smartFormat(annDiv);
+            
+                if (yieldElem && pyield !== undefined) {                    
+                    // Update text
+                    yieldElem.textContent = (pyield * 100).toFixed(2) + '%';
+
+                    // Update classes without destroying other layout classes
+                    // Remove all possible color classes first
+                    yieldElem.classList.remove('bg-red', 'bg-orange', 'bg-green');
+                    
+                    // Apply the new colour class based on logic
+                    if (pyield < 0.02) {
+                        yieldElem.classList.add('bg-red');
+                    } else if (pyield < 0.04) {
+                        yieldElem.classList.add('bg-orange');
+                    } else {
+                        yieldElem.classList.add('bg-green');
+                    }
+                }
+                
+                if (divGrowthElem && growth!== undefined) {    
+                    divGrowthElem.textContent = (growth * 100).toFixed(2) + '%';
+
+                    divGrowthElem.classList.remove('bg-red', 'bg-orange', 'bg-green');
+                    
+                    if (growth < 0.04) {
+                        divGrowthElem.classList.add('bg-red');
+                    } else if (growth < 0.08) {
+                        divGrowthElem.classList.add('bg-orange');
+                    } else {
+                        divGrowthElem.classList.add('bg-green');
+                    }
+                }
+                
+                createPieCharts(data.sector_labels, data.sector_values);
+            }
+            
+            // Recalculate weights for every stock using the new total
+            recalculateWeights(data.totals.total_market_value, assetType);
+            
+            checkStatusChanges();
+        }
+        
+        function createPieCharts(sectorLabels, sectorValues, allCategoryTotals = {}) {
             // Update Global Asset Allocation Chart
-            const categories = ['stocks', 'crypto', 'bonds', 'commodities']; //TODO add assets
+            const categories = ['stocks', 'crypto']; //TODO add assets
             let labels = [];
             let values = [];
 
             categories.forEach(cat => {
-                const elem = document.getElementById(`total-market-value-${cat}`);
-                if (elem) {
-                    // Get text: "1 234,56 €"
-                    let text = elem.textContent;
-                    // Replace non-breaking spaces and standard spaces
-                    text = text.replace(/\s|&nbsp;/g, '');
-                    // Replace comma with dot for parseFloat compatibility
-                    text = text.replace(',', '.');
-                    // Clean the currency string to get a raw number
-                    const val = parseFloat(text.replace(/[^0-9.-]/g,"")) || 0;
-                    if (val > 0) {
-                        labels.push(cat.charAt(0).toUpperCase() + cat.slice(1));
-                        values.push(val);
+                // Use the passed data if available, otherwise fallback to UI scraping
+                let val = allCategoryTotals[cat];
+        
+                // If val wasn't passed, try to get it from the UI (as a backup)
+                if (val === undefined) {
+                    const elem = document.getElementById(`total-market-value-${cat}`);
+                    if (elem) {
+                        let text = elem.textContent.replace(/\s|&nbsp;/g, '').replace(',', '.');
+                        val = parseFloat(text.replace(/[^0-9.-]/g,"")) || 0;
                     }
                 }
+
+                if (val > 0) {
+                    labels.push(cat.charAt(0).toUpperCase() + cat.slice(1));
+                    values.push(val);
+                }
+                console.log("category: ", cat);
+                console.log("val: ", val);
             });
             
             const cashInput = document.getElementById('free-cash-input');
@@ -437,7 +445,7 @@
                 values.push(cashVal);
             }
 
-            //console.log("createPieCharts Global Allocation called");
+            console.log("createPieCharts Global Allocation called");
             updatePieChart('asset-allocation-chart', labels, values, 'Global Allocation');
             
             // Update the grand total text at the top
@@ -748,8 +756,20 @@
                 .then(data => {
                     console.log("Update complete.");
                     
-                    updatePortfolioUI('stocks');
-                    updatePortfolioUI('crypto');
+                    updatePortfolioUI('stocks', null, data.portfolio.stocks);
+                    updatePortfolioUI('crypto', null, data.portfolio.crypto);
+                    
+                    const allTotals = {
+                        stocks: data.portfolio.stocks.totals.total_market_value,
+                        crypto: data.portfolio.crypto.totals.total_market_value
+                    };
+                    
+                    createPieCharts(
+                        data.portfolio.stocks.totals.sector_labels, 
+                        data.portfolio.stocks.totals.sector_values,
+                        allTotals
+                    );
+    
                 });
         
             // Find all input fields

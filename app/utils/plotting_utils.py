@@ -6,6 +6,7 @@ import numpy as np
 import os
 import statsmodels.api as sm
 import plotly.graph_objects as go
+import plotly.express as px
 import pandas as pd
 from scipy import stats
 
@@ -78,7 +79,86 @@ def create_monthly_dividends_figure(stock_metrics, current_shares):
     
     return fig
 
+# Plot correlation matrix between assets
+def plot_correlation_heatmap(correlation_matrix):
+    """
+    Plot a heatmap of the correlation matrix.
 
+    Args:
+        correlation_matrix (pd.DataFrame): The correlation matrix of stock returns.
+    """
+    print("plot_correlation_heatmap called")
+    
+#    print("correlation_matrix.values.tolist: " , correlation_matrix.values.tolist())
+#    print("correlation_matrix.columns.tolist: " , correlation_matrix.columns.tolist())
+#    print("correlation_matrix.index.tolist: " , correlation_matrix.index.tolist())
+
+    matrix_values = correlation_matrix.round(3).values.tolist()
+    tickers = correlation_matrix.columns.tolist()
+    num_assets = len(tickers)
+    
+    dynamic_size = min(500, (num_assets * 35) + 150)
+    
+    heatmap = go.Heatmap(
+        z=matrix_values,
+        x=tickers,
+        y=tickers,
+        colorscale='RdBu_r',
+        zmin=-1,
+        zmax=1,
+        text=[[f"{v:.2f}" for v in row] for row in matrix_values],
+        hovertemplate='x: %{x}<br>y: %{y}<br>Correlation: %{z}<extra></extra>',
+        colorbar=dict(title='Correlation')
+    )
+    
+    fig = go.Figure(data=[heatmap])
+    
+    fig.update_layout(
+        height=dynamic_size*0.8,
+        width=dynamic_size,
+        template="plotly_white",
+        margin=dict(l=0, r=80, t=0, b=0),  # reduce left margin (was 60), keep enough right margin for legend
+        yaxis=dict(
+            autorange='reversed',
+            scaleanchor="x",
+            scaleratio=1,
+            domain=[0, 1],  # full vertical space
+            side='left',
+            tickangle=0,
+            ticks='outside',
+            showline=True,
+            linewidth=1,
+            linecolor='black',
+            mirror=True,
+            automargin=True
+        ),
+        xaxis=dict(
+            tickangle=45,
+            side='bottom',
+            ticks='outside',
+            showline=True,
+            linewidth=1,
+            linecolor='black',
+            mirror=True,
+            automargin=True
+        ),
+        coloraxis_colorbar=dict(
+            thickness=20,      # thinner legend bar
+            len=0.8,          # height relative to plot (80%)
+            y=0.5,            # center vertically
+            yanchor='middle',
+            x=1.02,           # push closer to heatmap (default is ~1.05)
+            ticks='outside',
+            outlinewidth=1,
+            outlinecolor='black'
+        )
+    )
+
+    print("plot_correlation_heatmap out ")
+    
+    return fig
+    
+    
 def create_2d_correlation_map(stocks_data_ticker1, stocks_data_ticker2):
     """
     Correlation stock vs stock.

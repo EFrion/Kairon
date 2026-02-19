@@ -215,10 +215,42 @@ def sortino_ratio(stocks_data, RISK_FREE_RATE=0.0): #TODO merge with semivarianc
 #      
 #    return investments, stocks_value_returns, log_return_rate
 
-# Plots and metrics update
+@bp.route('/get_portfolio_data')
+def get_portfolio_data():
+    print("get_portfolio_data called")
+    
+    mode = request.args.get('mode', 'heatmap')
+    if not mode:
+        return "No mode provided", 400
+    
+    # Load data. TODO data persistence?
+    cache_dir = current_app.config['DATA_FOLDER']
+    stocks_data_path = os.path.join(cache_dir, "stocks_price_history_1d.csv")
+    stocks_data = pd.read_csv(stocks_data_path, index_col='Datetime', parse_dates=True)
+    
+    log_returns = np.log(stocks_data)-np.log(stocks_data.shift(1))
+    #print("stocks_data: ", stocks_data)
+    
+    correlation_matrix = log_returns.corr()
+    #print("correlation_matrix: ", correlation_matrix)
+    
+    if mode == 'heatmap':
+        fig = plotting_utils.plot_correlation_heatmap(correlation_matrix)
+    
+    fig_json = pio.to_json(fig)
+    fig_dict = json.loads(fig_json)
+    
+    print("get_portfolio_data out")
+
+    return jsonify({
+        'fig_data': fig_dict,
+    })
+    
+
+# Plots and metrics update for individual tickers
 @bp.route('/get_data')
 def get_data():
-    print("get_data called")
+    #print("get_data called")
     
     ticker = request.args.get('ticker')
     ticker2 = request.args.get('ticker2') # For the 2D correlation mode
@@ -311,26 +343,26 @@ def get_data():
     if hasattr(ticker_std, 'iloc'):
         ticker_std = ticker_std.iloc[0]
         
-    print("ticker_max: ", ticker_max)
-    print("ticker_min: ", ticker_min)
-    print("ticker_mean: ", ticker_mean)
-    print("ticker_std: ", ticker_std)
+#    print("ticker_max: ", ticker_max)
+#    print("ticker_min: ", ticker_min)
+#    print("ticker_mean: ", ticker_mean)
+#    print("ticker_std: ", ticker_std)
     
     
     z_score_max = (ticker_max - ticker_mean) / ticker_std
     z_score_min = (ticker_min - ticker_mean) / ticker_std
-    print("z_score_max: ", z_score_max)
-    print("z_score_min: ", z_score_min)
+#    print("z_score_max: ", z_score_max)
+#    print("z_score_min: ", z_score_min)
     
     # Number of outliers (deviation from normality)
     upper_bound = 3*ticker_std + ticker_mean
     lower_bound = -3*ticker_std + ticker_mean
-    print("upper_bound: ", upper_bound)
-    print("lower_bound: ", lower_bound)
+#    print("upper_bound: ", upper_bound)
+#    print("lower_bound: ", lower_bound)
     len_returns_below = len(ticker_log_returns[ticker_log_returns<lower_bound].dropna())
     len_returns_above = len(ticker_log_returns[ticker_log_returns>upper_bound].dropna())
     len_outliers = len_returns_below + len_returns_above
-    print("len_outliers: ", len_outliers)
+#    print("len_outliers: ", len_outliers)
     
     # Slice the data for just the ONE ticker requested
     if mode == 'price':
@@ -344,7 +376,7 @@ def get_data():
     elif mode == 'sentiment': #TODO
         fig = plotting_utils.create_price_chart(ticker_df, rolling_windows=[20,50,200])
     
-    print("get_data out")
+#    print("get_data out")
 
     #return pio.to_json(fig)
     fig_json = pio.to_json(fig)

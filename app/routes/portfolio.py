@@ -225,7 +225,7 @@ def create_monthly_dividends_plot(stock_metrics, current_shares):
     fig = plotting_utils.create_monthly_dividends_figure(stock_metrics, current_shares)
     
     # Return the HTML string that can be inserted directly into the template
-    return fig.to_html(full_html=False, include_plotlyjs='cdn')  #TODO
+    return fig.to_html(full_html=False, include_plotlyjs='cdn')  #TODO change to json
     
 @bp.route('/update_portfolio_cache')
 def update_portfolio_cache():
@@ -239,8 +239,8 @@ def update_portfolio_cache():
         finance_data.fetch_latest_metrics(  tickers, asset_type,
                                             interval='4h', force_update=True)
                                             
-    fresh_data = get_full_portfolio_data()
-    return jsonify(fresh_data)
+    updated_data = get_full_portfolio_data()
+    return jsonify(updated_data)
      
 @bp.route('/update_portfolio_data/<asset_type>', methods=['POST'])
 def update_portfolio_data(asset_type):
@@ -265,7 +265,11 @@ def update_portfolio_data(asset_type):
 #    current_gov     = {item['ticker']: float(item['gov']) for item in asset_items}
 #    current_cont    = {item['ticker']: float(item['cont']) for item in asset_items}
     
+    #print("results['total_market_value']: ", results['total_market_value'])
+    
     results = calculate_portfolio_metrics(metrics, current_shares, current_prices)
+    
+    #print("results['total_market_value']: ", results['total_market_value'])
     
     response = {
         'total_market_value': results['total_market_value'],

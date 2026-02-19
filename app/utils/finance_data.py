@@ -537,7 +537,9 @@ def fetch_latest_metrics(tickers_list, category_name='assets', test=False, requi
         
     #last_update_time = datetime(1900, 1, 1) # Use that to debug
         
+
     # Determine if we need an update
+    needs_price_download = False
     if interval=="1d":
         needs_price_download = datetime.now() - last_update_time > timedelta(days=1)
     else:
@@ -570,6 +572,7 @@ def fetch_latest_metrics(tickers_list, category_name='assets', test=False, requi
     if (not is_business_day and category_name=='stocks' and not new_ticker):
         needs_price_download = False
     
+        
     print("needs_price_download: ", needs_price_download)
     #print("download_start: ", download_start)
     

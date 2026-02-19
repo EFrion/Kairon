@@ -14,7 +14,18 @@
 
     <h1>{{ title }}</h1>
     
-    <div class="stats-page-layout">
+    <div class="chart-container" style="margin: auto;">
+        <div class="analysis-tabs" style="display: flex; border-bottom: 1px solid #ddd; background: #f8f9fa;">
+            <div class="portfolio-tab portfolio-active-tab" data-mode="heatmap" style="padding: 10px 20px; cursor: pointer; border-right: 1px solid #ddd;">Correlation</div>
+            <div class="portfolio-tab" data-mode="returns" style="padding: 10px 20px; cursor: pointer; color: #888; border-right: 1px solid #ddd;">Log Returns</div>
+        </div>
+    
+        <h2 id="portfolio-chart-title" style="margin: 0; padding:20px;"></h2>
+        <div id="portfolio-plot-container" style="width: 100%; height: auto; position: relative;">
+        </div>
+    </div>
+    
+    <div class="stats-page-layout"  style="padding-top: 20px">
         <div class="table-chart-container">
             <table id="ticker-sidebar-table">
                 <thead>
@@ -205,15 +216,52 @@
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // Portfolio variables
+            let portfolioMode = "heatmap"; // Default portfolio mode
+            const portfolioTabs = document.querySelectorAll('.portfolio-tab');
+            
+            // Tickers variables
             let currentTicker = "{{ selected_ticker }}";
             let secondaryTicker = "";
-            let currentMode = "price"; // Default mode
-
+            let currentMode = "price"; // Default ticker mode
             const tabs = document.querySelectorAll('.tab');
             const tickerRows = document.querySelectorAll('.ticker-row');
 
             updateView();
+            updatePortfolioView();
             
+            // Portfolio logic
+            function updatePortfolioView() {
+                const container = document.getElementById('portfolio-plot-container');
+                const title = document.getElementById('portfolio-chart-title');
+                
+                title.innerText = `${portfolioMode.toUpperCase()}`;
+
+                // Fetching data for the whole portfolio
+                fetch(`/get_portfolio_data?mode=${portfolioMode}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (portfolioMode === 'heatmap'){
+                            Plotly.react(container, data.fig_data.data, data.fig_data.layout, { displayModeBar: false });
+                        } else{
+                            Plotly.react(container, data.fig_data.data, data.fig_data.layout);
+                        }
+                    })
+                    .catch(err => console.error("Portfolio Plot Error:", err));
+            }
+
+            // Portfolio Tab Click Listener
+            portfolioTabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    portfolioTabs.forEach(t => t.classList.remove('portfolio-active-tab'));
+                    this.classList.add('portfolio-active-tab');
+                    
+                    portfolioMode = this.dataset.mode;
+                    updatePortfolioView();
+                });
+            });
+            
+            // Individual ticker logic
             function updateView() {
                 // Here we update the fetch URL to include the mode
                 // Example: /get_data?ticker=AAPL&mode=price
@@ -422,7 +470,6 @@
                     });
             });
         });
-        
     </script>
 </body>
 
