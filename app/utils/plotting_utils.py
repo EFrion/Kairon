@@ -421,7 +421,7 @@ def create_returns_distribution_chart(returns):
     
     fig.add_trace(go.Histogram(
         x=data.tolist(),
-        name='Return frequency',
+        name='Return density',
         histnorm='probability density',
         marker=dict(
             color='#007BFF',

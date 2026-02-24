@@ -246,8 +246,8 @@ def get_portfolio_data():
     len_data = len(stocks_data.columns)
     #print("len_data: ", len_data)
     
-    weights = [1/len_data]*len_data # Equal weight for now
-    #print("weights: ", weights)
+    weights = np.array([1/len_data]*len_data) # Equal weight for now
+    print("weights: ", weights)
     
     # Simple returns of the individual stocks
     simple_returns = stocks_data.pct_change().dropna()
@@ -280,6 +280,12 @@ def get_portfolio_data():
     
     correlation_matrix = log_returns.corr()
     #print("correlation_matrix: ", correlation_matrix)
+    
+    # Standard deviation
+    variance_portfolio = weights.T @ simple_returns.cov() @ weights
+    #print("variance_portfolio: ", variance_portfolio)
+    std_portfolio = np.sqrt(variance_portfolio)
+    print("std_portfolio: ", std_portfolio)
     
     if mode == 'heatmap':
         fig = plotting_utils.plot_correlation_heatmap(correlation_matrix)
