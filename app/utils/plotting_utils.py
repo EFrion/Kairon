@@ -10,6 +10,125 @@ import plotly.express as px
 import pandas as pd
 from scipy import stats
 
+def plot_efficient_frontier_and_portfolios(
+    optimisation_results, individual_stock_metrics
+):
+    """
+    Plots the efficient frontier, Monte Carlo simulations, individual stocks,
+    and optimised portfolios (MVP, Sharpe, Sortino, MVSK).
+
+    Args:
+        static_results (dict): Results from static optimisation.
+        dynamic_results (dict): Results from dynamic optimisation.
+        individual_stock_metrics (list): List of dictionaries with individual stock metrics.
+        portfolio_tickers (list): List of ticker symbols for the assets.
+        static_portfolio_points_raw_mc (list): List of dictionaries for static Monte Carlo portfolios.
+        dynamic_portfolio_points_raw_mc (list): List of dictionaries for dynamic Monte Carlo portfolios.
+        output_dir (str): The directory to save the plot.
+        feature_toggles (dict): Dictionary of feature toggles.
+        num_assets (int): Number of assets in the portfolio.
+    """
+    fig = go.Figure()
+    
+#    RUN_STATIC_PORTFOLIO = feature_toggles['RUN_STATIC_PORTFOLIO']
+    RUN_STATIC_PORTFOLIO = True
+#    RUN_DYNAMIC_PORTFOLIO = feature_toggles['RUN_DYNAMIC_PORTFOLIO']
+#    RUN_EQUAL_WEIGHTED_PORTFOLIO = feature_toggles['RUN_EQUAL_WEIGHTED_PORTFOLIO']
+#    RUN_MONTE_CARLO_SIMULATION = feature_toggles['RUN_MONTE_CARLO_SIMULATION']
+#    RUN_MVO_OPTIMISATION = feature_toggles['RUN_MVO_OPTIMISATION']
+    RUN_MVO_OPTIMISATION = True
+#    RUN_SHARPE_OPTIMISATION = feature_toggles['RUN_SHARPE_OPTIMISATION']
+#    RUN_SORTINO_OPTIMISATION = feature_toggles['RUN_SORTINO_OPTIMISATION']
+#    RUN_MVSK_OPTIMISATION = feature_toggles['RUN_MVSK_OPTIMISATION']
+
+#    plt.figure(figsize=(14, 8)) # Larger figure for more elements
+
+#    # Plot all Monte-Carlo-simulated portfolio combinations (lighter color, background)
+#    if RUN_MONTE_CARLO_SIMULATION:
+#        if RUN_STATIC_PORTFOLIO and static_portfolio_points_raw_mc:
+#            plt.scatter([p['std_dev'] * 100 for p in static_portfolio_points_raw_mc],
+#                        [p['return'] * 100 for p in static_portfolio_points_raw_mc],
+#                        color='blue', marker='o', s=10, alpha=0.5, # More transparent
+#                        label='Monte Carlo portfolio combinations (Static)')
+#        if RUN_DYNAMIC_PORTFOLIO and dynamic_portfolio_points_raw_mc and dynamic_results['dynamic_covariance_available']:
+#            plt.scatter([p['std_dev'] * 100 for p in dynamic_portfolio_points_raw_mc],
+#                        [p['return'] * 100 for p in dynamic_portfolio_points_raw_mc],
+#                        color='red', marker='o', s=10, alpha=0.5, # More transparent
+#                        label='Monte Carlo portfolio combinations (Dynamic)')
+    
+    # Plot the Efficient Frontier line (Static Covariance)
+#    if RUN_STATIC_PORTFOLIO and RUN_MVO_OPTIMISATION and num_assets > 20 and static_results['mvp'] and static_results['efficient_frontier_std_devs']:
+#        plt.plot([s * 100 for s in static_results['efficient_frontier_std_devs']],
+#                 [r * 100 for r in static_results['efficient_frontier_returns']],
+#                 color='blue', linestyle='-', linewidth=2, label='Efficient frontier (Static)')
+
+    if RUN_STATIC_PORTFOLIO and RUN_MVO_OPTIMISATION and optimisation_results['mvp'] and optimisation_results['efficient_frontier_std_devs']:
+        fig.add_trace(go.Scatter(
+            x=[s * 100 for s in optimisation_results['efficient_frontier_std_devs']],
+            y=[r * 100 for r in optimisation_results['efficient_frontier_returns']],
+            mode='lines',
+            line=dict(color='blue', width=2),
+            name='Efficient frontier (Static)'
+        ))
+
+#    # Plot the Efficient Frontier line (Dynamic Covariance)
+#    if RUN_DYNAMIC_PORTFOLIO and RUN_MVO_OPTIMISATION and num_assets > 20 and dynamic_results['mvp'] and dynamic_results['efficient_frontier_std_devs'] and dynamic_results['dynamic_covariance_available']:
+#        plt.plot([s * 100 for s in dynamic_results['efficient_frontier_std_devs']],
+#                 [r * 100 for r in dynamic_results['efficient_frontier_returns']],
+#                 color='red', linestyle='-', linewidth=2, label='Efficient frontier (Dynamic)')
+
+
+    # Plot individual assets in the return/std space
+    colors = px.colors.qualitative.Dark24  # or any palette you prefer
+    for i, assets in enumerate(individual_stock_metrics):
+        fig.add_trace(go.Scatter(
+            x=[assets['annualised_std'] * 100],
+            y=[assets['annual_return'] * 100],
+            mode='markers+text',
+            marker=dict(size=12, color=colors[i % len(colors)], line=dict(width=1.5, color='black')),
+            text=[assets['ticker']],
+            textposition='top center',
+            name=assets['ticker'],
+            hovertemplate=(
+                f"<b>{assets['ticker']}</b><br>" +
+                f"Volatility: {assets['annualised_std']*100:.2f}%<br>" +
+                f"Return: {assets['annual_return']*100:.2f}%<extra></extra>"
+            )
+        ))
+
+
+    if RUN_STATIC_PORTFOLIO:
+#        # Plot the EWP (Static)
+#        if RUN_EQUAL_WEIGHTED_PORTFOLIO and static_results['ewp'] and static_results['ewp']['success']:
+#            plt.scatter(static_results['ewp']['Volatility'] * 100, static_results['ewp']['Return'] * 100,
+#                        marker='p', s=200, color='darkblue', edgecolor='darkblue', alpha=0.3, linewidth=1.5,
+#                        label=f"EWP (Static), Sharpe ratio={static_results['ewp']['Sharpe Ratio']:.2}")
+                        
+        # Plot the MVP (Static)
+        if RUN_MVO_OPTIMISATION and optimisation_results['mvp'] and optimisation_results['mvp']['success']:
+            mvp = optimisation_results['mvp']['metrics']
+            fig.add_trace(go.Scatter(
+                x=[mvp['Volatility'] * 100],
+                y=[mvp['Return'] * 100],
+                mode='markers',
+                marker=dict(size=16, symbol='star', color='darkblue', opacity=0.7, line=dict(width=1.5, color='darkblue')),
+                name='MV Portfolio (Static)',
+                hovertemplate=(
+                    f"<b>Minimum Variance Portfolio</b><br>" +
+                    f"Volatility: {mvp['Volatility']*100:.2f}%<br>" +
+                    f"Return: {mvp['Return']*100:.2f}%<extra></extra>"
+                )
+            ))
+            
+    fig.update_layout(
+        xaxis_title="Annualised volatility (%)",
+        yaxis_title="Annualised return (%)",
+        template='plotly_white',
+        hovermode='closest'
+    )
+    
+    return fig
+
 def create_monthly_dividends_figure(stock_metrics, current_shares):
     """
     Interactive Plotly bar chart showing total monthly dividend payout.
@@ -387,10 +506,10 @@ def create_price_chart(stocks_data, start_date=None, end_date=None, rolling_wind
     
 def create_returns_distribution_chart(returns):
     """
-    Distribution plot for log returns.
+    Distribution plot for returns.
     
     Input: DataFrame with one column of prices
-    Output: Plotly figure (Histogram of log returns)
+    Output: Plotly figure (Histogram of returns)
     """
     print("create_returns_distribution_chart called")
     
@@ -407,8 +526,6 @@ def create_returns_distribution_chart(returns):
         fig.add_annotation(text="Insufficient data for returns", showarrow=False)
         return fig
         
-    #print("log_returns: ", log_returns)
-    #print("ticker_name: ", ticker_name)
     #print("data: ", data)
     
     # Create histogram

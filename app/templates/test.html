@@ -16,8 +16,9 @@
     
     <div class="chart-container">
         <div class="analysis-tabs">
-            <div class="portfolio-tab portfolio-active-tab" data-mode="returns">Log Returns</div>
+            <div class="portfolio-tab portfolio-active-tab" data-mode="returns">Returns</div>
             <div class="portfolio-tab" data-mode="heatmap">Correlation</div>
+            <div class="portfolio-tab" data-mode="efficient_frontier">Efficient frontier</div>
         </div>
      
         <div id="history-controls">
@@ -236,7 +237,7 @@
                 const container = document.getElementById('portfolio-plot-container');
                 const title = document.getElementById('portfolio-chart-title');
                 
-                title.innerText = `${portfolioMode.toUpperCase()}`;
+                title.innerText = `${portfolioMode.toUpperCase().replace(/[^A-Z ]/g, ' ')}`;
 
                 // Fetching data for the whole portfolio
                 fetch(`/get_portfolio_data?mode=${portfolioMode}`)
