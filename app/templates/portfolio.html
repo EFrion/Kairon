@@ -99,16 +99,16 @@
     </form>
 
 
-<!--    <div class="asset-tabs" style="margin-bottom: 20px;">-->
-<!--        <button class="tab-btn active" onclick="switchCategory('stocks')">Stocks</button>-->
-<!--        <button class="tab-btn" onclick="switchCategory('crypto')">Crypto</button>-->
-<!--        <button class="tab-btn" onclick="switchCategory('bonds')">Bonds</button>-->
-<!--    </div>-->
 
     <div class="input-section" style="margin-bottom: 20px;">
         <button id="add-ticker-btn" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">
                 + Add New <span id="category-label">Ticker</span>
         </button>
+        
+        <div id="category-selector" style="display: none; margin-top: 10px;">
+            <button class="category-choice" data-category="stocks">Stocks</button>
+            <button class="category-choice" data-category="crypto">Crypto</button>
+        </div>
         
         <form id="ticker-form" method="POST" action="/add/stocks" 
               style="display: none; padding: 20px; border: 1px solid #ccc; border-radius: 5px; margin-top: 15px;">
@@ -594,25 +594,7 @@
             // Trigger the AJAX update after local calculations
             updatePortfolioUI(assetType, ticker);
         }
-        
-        // TODO function hide or show tables for specific assets
-        //function switchCategory(category) {
-        //    console.log("switchCategory called");
-            // Update the Form Action URL
-       //     const form = document.getElementById('ticker-form');
-       //     form.action = `/add/${category}`;
-            
-            // Update UI Labels
-       //     document.getElementById('category-label').textContent = category.charAt(0).toUpperCase() + category.slice(1);
-       //     document.getElementById('form-category-name').textContent = category.toUpperCase();
-            
-            // Highlight active tab
-      //      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-       //     event.currentTarget.classList.add('active');
-            
-            // Wrap tables in divs with IDs like 'table-stocks', 'table-crypto'
-       // }
-        
+                
         function smartFormat(value) {
             // Clean the input (in case it's a string with spaces/commas)
             const cleanValue = String(value).replace(/\s/g, '').replace(',', '.');
@@ -805,6 +787,8 @@
             const addTickerBtn = document.getElementById('add-ticker-btn');
             const cancelTickerBtn = document.getElementById('cancel-ticker-btn');
             const tickerForm = document.getElementById('ticker-form');
+            const categoryLabel = document.getElementById('category-label');
+            const categorySelector = document.getElementById('category-selector');
             const freeCashInput = document.getElementById('free-cash-input');
 
             // Combine all inputs
@@ -837,17 +821,50 @@
             
             if (addTickerBtn) {
                 addTickerBtn.addEventListener('click', function() {
+                    const isCategorySelectorVisible = categorySelector.style.display === 'block';
+                    const isFormVisible = tickerForm.style.display === 'block';
+                    
                     //console.log("addTickerBtn called");
-                    tickerForm.style.display = 'block';
-                    addTickerBtn.style.display = 'none';
+                    if (isCategorySelectorVisible || isFormVisible) {
+                        // If visible, hide it
+                        categorySelector.style.display = 'none';
+                        tickerForm.style.display = 'none';
+                    } else {
+                        // If hidden, show it
+                        categorySelector.style.display = 'block';
+                        tickerForm.style.display = 'none';
+                    }
                 });
             }
+
+            
+            // Add event listeners to category buttons
+            document.querySelectorAll('.category-choice').forEach(button => {
+                button.addEventListener('click', (event) => {
+                    const category = event.currentTarget.getAttribute('data-category');
+
+                    // Update form action URL
+                    tickerForm.action = `/add/${category}`;
+
+                    // Update UI Labels
+                    categoryLabel.textContent = category.charAt(0).toUpperCase() + category.slice(1);
+
+                    // Hide category selector, show the form
+                    categorySelector.style.display = 'none';
+                    tickerForm.style.display = 'block';
+
+                    // Focus on the input field
+                    document.getElementById('ticker').focus();
+                });
+            });
+
 
             if (cancelTickerBtn) {
                 cancelTickerBtn.addEventListener('click', function() {
                     //console.log("cancelTickerBtn called");
                     tickerForm.style.display = 'none';
-                    addTickerBtn.style.display = 'block';
+                    categorySelector.style.display = 'none';
+                    //addTickerBtn.style.display = 'block';
                     tickerForm.reset();
                 });
             }
