@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, session, redirect, url_fo
 import json
 import os
 from app.utils import plotting_utils, storage_utils, finance_data
+from app.models import Asset, Portfolio, PortfolioManager
 
 bp = Blueprint('portfolio', __name__)
 
@@ -22,9 +23,7 @@ def portfolio_feature():
     
 def get_full_portfolio_data():
     asset_classes = ['stocks', 'crypto'] # Only two asset classes for now. TODO
-    portfolio_data = {}  # This dictionary will hold metrics, shares, and prices for every asset class    
-    total_market_value = 0.0
-    grand_total_cost_basis = 0.0
+    portfolios = {}
     
     free_cash = storage_utils.load_cash() # Load the cash data
 
@@ -35,54 +34,51 @@ def get_full_portfolio_data():
         
         # Load shares and prices from storage_utils
         shares  = storage_utils.load_shares(asset_type)
-        prices  = storage_utils.load_prices(asset_type)
-        env     = storage_utils.load_env(asset_type)
-        soc     = storage_utils.load_soc(asset_type)
-        gov     = storage_utils.load_gov(asset_type)
-        cont    = storage_utils.load_cont(asset_type)
+        avg_price  = storage_utils.load_prices(asset_type)
+        env = storage_utils.load_env(asset_type)
+        soc = storage_utils.load_soc(asset_type)
+        gov = storage_utils.load_gov(asset_type)
+        cont = storage_utils.load_cont(asset_type)
+                
+        assets = [
+            Asset(
+                ticker=t,
+                metrics=next(m for m in raw_metrics if m['Ticker']==t),
+                shares=shares.get(t, 0),
+                avg_price=avg_price.get(t, 0),
+                env=env.get(t, 0),
+                soc=soc.get(t, 0),
+                gov=gov.get(t, 0),
+                cont=cont.get(t, 0)
+            ) for t in tickers
+        ]
         
-        # Calculate metrics for this specific asset class
-        cat_metrics = calculate_portfolio_metrics(raw_metrics, shares, prices)
+        portfolios[asset_type] = Portfolio(assets)
         
-        # Store in the dictionary to pass to the template
-        portfolio_data[asset_type] = {
-            'metrics': raw_metrics,
-            'shares': shares,
-            'prices': prices,
-            'totals': cat_metrics,
-            'env': env,
-            'soc': soc,
-            'gov': gov,
-            'cont': cont
-        }
         
-        print("cat_metrics[total_market_value]: ", cat_metrics['total_market_value'])
-        
-        # Aggregate grand totals
-        total_market_value += cat_metrics['total_market_value']
-        grand_total_cost_basis += cat_metrics['total_cost_basis']
-
-    print("total_market_value: ", total_market_value)
-    print("grand_total_cost_basis: ", grand_total_cost_basis)
+    print("portfolios:" , portfolios)
     
+    portfolio = PortfolioManager(portfolios)
+    print("portfolio: ", portfolio)
+    
+    total_market_value = sum(p.total_market_value for p in portfolio.values())
+    grand_total_cost_basis = sum(p.total_cost_basis for p in portfolio.values())
     grand_total_with_cash = total_market_value + free_cash # Total portfolio value
 
-    # Generate the dividend plot (stocks only)
-    stock_stuff = portfolio_data['stocks']
-    dividend_plot = create_monthly_dividends_plot(
-        stock_stuff['metrics'], 
-        stock_stuff['shares']
-    )
+    # Generate the dividend plot (stocks only)    
+    stock_shares_dict = {assets.ticker: assets.shares for assets in portfolio.stocks.assets}
+    stock_metrics_list = [assets.metrics for assets in portfolio.stocks.assets]
+    dividend_plot = create_monthly_dividends_plot(stock_metrics_list, stock_shares_dict)
 
     return {
-        'portfolio': portfolio_data,
+        'portfolio': portfolio,
         'total_market_value': total_market_value,
         'total_cost_basis': grand_total_cost_basis,
         'grand_total_with_cash': grand_total_with_cash,
         'free_cash_value': free_cash,
         'monthly_div_plot': dividend_plot,
-        'monthly_payment_counts': stock_stuff['totals']['monthly_payment_counts'],
-        'total_monthly_dividend_payout': stock_stuff['totals']['total_monthly_dividend_payout']
+        'monthly_payment_counts': portfolio.stocks.monthly_dividend_data.counts,
+        'total_monthly_dividend_payout': portfolio.stocks.monthly_dividend_data.payouts
     }
 
 def get_assets(asset_class='stocks'):
@@ -109,112 +105,6 @@ def get_assets(asset_class='stocks'):
     
     print("get_assets out")
     return defaults.get(asset_class, [])
-
-def calculate_portfolio_metrics(metrics, current_shares, current_prices):
-    """
-    Calculates total portfolio values and monthly dividends.
-    """
-    print("calculate_portfolio_metrics called")
-    
-    total_market_value = 0.0
-    total_cost_basis = 0.0
-    monthly_payment_counts = [0] * 12
-    total_monthly_dividend_payout = [0.00] * 12
-    annual_dividends = 0.0
-    sectors = {}
-    yield_val = 0.0
-    total_weighted_yield = 0.0
-    portfolio_yield = 0.0
-    total_weighted_div_growth = 0.0
-    div_growth_val = 0.0
-    portfolio_div_growth = 0.0
-
-    for asset in metrics:
-        ticker = asset['Ticker']
-        #print("ticker: ", ticker)
-        shares = current_shares.get(ticker, 0.0)
-        avg_price = current_prices.get(ticker, 0.0)
-        
-        # Retrieve sector
-        raw_sector = asset.get('Sector', "null")
-        try:
-            sector = str(raw_sector) if raw_sector is not None else "null"
-        except (ValueError, TypeError):
-            sector = "null"
-        #print("sector: ", sector)
-
-        # Calculate market value
-        raw_quote_eur = asset.get('Quote_EUR', 0.0)
-        try:
-            quote_eur = float(raw_quote_eur)
-        except (ValueError, TypeError):
-            quote_eur = 0.0
-        #print("quote_eur: ", quote_eur)
-        
-        market_value = shares * quote_eur
-        total_market_value += market_value # Aggregate market value
-        
-        sectors[sector] = sectors.get(sector, 0) + market_value
-
-        # Calculate total cost basis (price paid)
-        cost_basis = shares * avg_price
-        total_cost_basis += cost_basis
-
-        # Calculate monthly payment counts and payouts (dividends)
-        raw_div = asset.get('Latest_Div_EUR', 0.0)
-        try:
-            # This handles cases where raw_div is "N/A" or any other string
-            latest_div = float(raw_div) if raw_div is not None else 0.0
-        except (ValueError, TypeError):
-            latest_div = 0.0
-        
-        months_paid = asset.get('Months_Paid')
-        if not isinstance(months_paid, list) or len(months_paid) != 12:
-            months_paid = [0] * 12
-            
-        if shares > 0 and latest_div > 0:
-            payout_amount = latest_div * shares
-            for i in range(12):
-                if months_paid[i] == 1:
-                    monthly_payment_counts[i] += 1
-                    total_monthly_dividend_payout[i] += payout_amount
-                    
-            yield_val = asset.get('Div_Yield',0.0)
-            asset_income = market_value * yield_val
-            total_weighted_yield += asset_income
-            
-            div_growth_val = asset.get('Div_CAGR', 0.0)
-            total_weighted_div_growth += (asset_income*div_growth_val)
-            
-            #print("yield_val: ", yield_val)
-            #print("total_weighted_yield: ", total_weighted_yield)
-    
-    annual_dividends = sum(total_monthly_dividend_payout)
-    print("annual_dividends: ", annual_dividends)
-    
-    portfolio_yield = (total_weighted_yield / total_market_value) if total_market_value > 0 else 0
-    portfolio_div_growth = (total_weighted_div_growth / total_weighted_yield) if total_weighted_yield > 0 else 0
-    
-    sector_labels = list(sectors.keys())
-    #print("sector_labels: ", sector_labels)
-
-    sector_values = list(sectors.values())
-    #print("sector_values: ", sector_values)
-   
-    print("calculate_portfolio_metrics out")
-    return {
-        'total_market_value': total_market_value,
-        'portfolio_yield': portfolio_yield,
-        'portfolio_div_growth': portfolio_div_growth,
-        'total_cost_basis': total_cost_basis,
-        'monthly_payment_counts': monthly_payment_counts,
-        'total_monthly_dividend_payout': total_monthly_dividend_payout,
-        'annual_dividends': annual_dividends,
-        'current_shares': current_shares,
-        'current_prices': current_prices,
-        'sector_labels' : sector_labels,
-        'sector_values' : sector_values
-    }
 
 
 def create_monthly_dividends_plot(stock_metrics, current_shares):
@@ -249,6 +139,8 @@ def update_portfolio_cache():
         fig = plotting_utils.create_monthly_dividends_figure(metrics, current_shares)
         updated_data['plot_data'] = fig.to_json()
     
+    updated_data['portfolio'] = updated_data['portfolio'].to_dict()
+        
     return jsonify(updated_data)
      
 @bp.route('/update_portfolio_data/<asset_type>', methods=['POST'])

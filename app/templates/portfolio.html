@@ -59,20 +59,14 @@
         <div id="stocks-section">
             <div class="table-container">
                 {{ utils.asset_table(   "Stocks",
-                                        portfolio.stocks.metrics,
-                                        portfolio.stocks.shares,
-                                        portfolio.stocks.prices,
-                                        portfolio.stocks.totals.total_market_value,
+                                        portfolio.stocks.assets,
+                                        portfolio.stocks.total_market_value,
                                         "stocks",
-                                        portfolio.stocks.totals.total_cost_basis,
-                                        portfolio.stocks.totals.monthly_payment_counts,
-                                        portfolio.stocks.totals.portfolio_yield,
-                                        portfolio.stocks.totals.portfolio_div_growth,
-                                        portfolio.stocks.totals.annual_dividends,
-                                        portfolio.stocks.env,
-                                        portfolio.stocks.soc,
-                                        portfolio.stocks.gov,
-                                        portfolio.stocks.cont
+                                        portfolio.stocks.total_cost_basis,
+                                        portfolio.stocks.monthly_dividend_data.counts,
+                                        portfolio.stocks.portfolio_yield_data.div_yield,
+                                        portfolio.stocks.portfolio_yield_data.div_growth,
+                                        portfolio.stocks.annual_dividends
                                     ) }}
             </div>
         </div>
@@ -80,16 +74,10 @@
         <div id="crypto-section" style="margin-top: 40px;">
             <div class="table-container">
                 {{ utils.asset_table(   "Crypto",
-                                        portfolio.crypto.metrics,
-                                        portfolio.crypto.shares,
-                                        portfolio.crypto.prices,
-                                        portfolio.crypto.totals.total_market_value,
+                                        portfolio.crypto.assets,
+                                        portfolio.crypto.total_market_value,
                                         "crypto",
-                                        portfolio.crypto.totals.total_cost_basis,
-                                        [],
-                                        [],
-                                        [],
-                                        [],
+                                        portfolio.crypto.total_cost_basis,
                                         [],
                                         [],
                                         []
@@ -307,19 +295,16 @@
         
         function processPortfolioResponse(assetType, data, ticker) {
             console.log('processPortfolioResponse: ', assetType);
-            // If data.totals exists, use it. 
-            // Otherwise, use 'data' itself.
-            const totals = data.totals || data;
     
             // Update category-specific totals
             const marketValueElem = document.getElementById(`total-market-value-${assetType}`);
             const costBasisElem = document.getElementById(`total-cost-basis-${assetType}`);
                         
-            if (marketValueElem && totals.total_market_value !== undefined) {
-                marketValueElem.textContent = smartFormat(totals.total_market_value);
+            if (marketValueElem && data.total_market_value !== undefined) {
+                marketValueElem.textContent = smartFormat(data.total_market_value);
             }
-            if (costBasisElem && totals.total_cost_basis !== undefined) {
-                costBasisElem.textContent = smartFormat(totals.total_cost_basis);
+            if (costBasisElem && data.total_cost_basis !== undefined) {
+                costBasisElem.textContent = smartFormat(data.total_cost_basis);
             }
             
             // Asset-specific logic (dividends for stocks only)
@@ -327,9 +312,9 @@
                 const yieldElem = document.getElementById('portfolio-yield-display');
                 const divGrowthElem = document.getElementById('portfolio-div-growth-display');
                 const annDivElem = document.getElementById('annual-dividends');
-                const pyield = totals.portfolio_yield;
-                const growth = totals.portfolio_div_growth;
-                const annDiv = totals.annual_dividends;
+                const pyield = data.portfolio_yield;
+                const growth = data.portfolio_div_growth;
+                const annDiv = data.annual_dividends;
                 const envInputUpdate = document.querySelector(`input[name="env_${ticker}"]`);
                 const socInputUpdate = document.querySelector(`input[name="soc_${ticker}"]`);
                 const govInputUpdate = document.querySelector(`input[name="gov_${ticker}"]`);
@@ -356,18 +341,18 @@
             
                 // Update Plotly graph
                 const plotDiv = document.getElementById('monthly-dividend-plot');
-                if (plotDiv && totals.plot_data) {
-                    const newFigure = JSON.parse(totals.plot_data); // Re-parse the figure data from JSON sent by Flask
+                if (plotDiv && data.plot_data) {
+                    const newFigure = JSON.parse(data.plot_data); // Re-parse the figure data from JSON sent by Flask
                     Plotly.react(plotDiv, newFigure.data, newFigure.layout); // Updates data and layout of the existing plot
                 }
 
                 // Update monthly payment counts
                 const dataRow = document.getElementById('total-month-data-row');
 
-                if (dataRow && totals.monthly_payment_counts) {
+                if (dataRow && data.monthly_payment_counts) {
                     dataRow.innerHTML = ''; // Clears only the spans, not the labels above them
                     
-                    totals.monthly_payment_counts.forEach(count => {
+                    data.monthly_payment_counts.forEach(count => {
                         const span = document.createElement('span');
                         // Add 'paid' class if count > 0 to match the Jinja logic
                         span.className = `month-data-item total-count-item ${count > 0 ? 'paid' : ''}`;
@@ -410,11 +395,11 @@
                     }
                 }
                 
-                createPieCharts(totals.sector_labels, totals.sector_values);
+                createPieCharts(data.sector_labels, data.sector_values);
             }
             
             // Recalculate weights for every stock using the new total
-            recalculateWeights(totals.total_market_value, assetType);
+            recalculateWeights(data.total_market_value, assetType);
             
             checkStatusChanges();
         }
@@ -756,13 +741,13 @@
                 updatePortfolioUI('crypto', null, data.portfolio.crypto);
                 
                 const allTotals = {
-                    stocks: data.portfolio.stocks.totals.total_market_value,
-                    crypto: data.portfolio.crypto.totals.total_market_value
+                    stocks: data.portfolio.stocks.total_market_value,
+                    crypto: data.portfolio.crypto.total_market_value
                 };
                 
                 createPieCharts(
-                    data.portfolio.stocks.totals.sector_labels, 
-                    data.portfolio.stocks.totals.sector_values,
+                    data.portfolio.stocks.sector_labels, 
+                    data.portfolio.stocks.sector_values,
                     allTotals
                 );
                 
@@ -957,8 +942,8 @@
             checkStatusChanges();
             
             // Initial load: Use the data provided by Flask/Jinja
-            const initialLabels = {{ portfolio.stocks.totals.sector_labels | tojson }};
-            const initialValues = {{ portfolio.stocks.totals.sector_values | tojson }};
+            const initialLabels = {{ portfolio.stocks.sectors.labels | tojson }};
+            const initialValues = {{ portfolio.stocks.sectors.values | tojson }};
     
             //console.log("Initial createPieCharts called");
             createPieCharts(initialLabels, initialValues);
