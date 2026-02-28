@@ -35,7 +35,7 @@
             <h2 style="margin: 0; text-align: center; font-size: 1.2em; color: #3498db;">Available Cash</h2>
             <div style="position: relative; display: inline-block;">
                 <input type="number" id="free-cash-input" 
-                       value="{{ free_cash_value | default(0) }}" 
+                       value="{{ portfolio.free_cash | default(0) }}" 
                        min="0"
                        step="0.01"
                        style="background: transparent; border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; color: #3498db; font-size: 1.8em; font-weight: bold; width: 160px; text-align: center; outline: none; transition: all 0.3s;"
@@ -63,7 +63,7 @@
                                         portfolio.stocks.total_market_value,
                                         "stocks",
                                         portfolio.stocks.total_cost_basis,
-                                        portfolio.stocks.monthly_dividend_data.counts,
+                                        portfolio.stocks.monthly_income_data.counts,
                                         portfolio.stocks.portfolio_yield_data.div_yield,
                                         portfolio.stocks.portfolio_yield_data.div_growth,
                                         portfolio.stocks.annual_dividends
@@ -116,10 +116,10 @@
     </div>
 
     
-    {% if monthly_div_plot %}
-        <h2>Monthly Dividend Flow</h2>
-        <div id="monthly-dividend-plot">
-            {{ monthly_div_plot|safe }}
+    {% if income_plot %}
+        <h2>Income</h2>
+        <div id="monthly-income-plot">
+            {{ income_plot|safe }}
         </div>
     {% endif %}
     
@@ -340,7 +340,7 @@
                 updateColor(contInputUpdate);
             
                 // Update Plotly graph
-                const plotDiv = document.getElementById('monthly-dividend-plot');
+                const plotDiv = document.getElementById('monthly-income-plot');
                 if (plotDiv && data.plot_data) {
                     const newFigure = JSON.parse(data.plot_data); // Re-parse the figure data from JSON sent by Flask
                     Plotly.react(plotDiv, newFigure.data, newFigure.layout); // Updates data and layout of the existing plot
@@ -753,7 +753,7 @@
                 
                 // Update dividend plot
                 if (data.plot_data) {
-                    const plotDiv = document.getElementById('monthly-dividend-plot');
+                    const plotDiv = document.getElementById('monthly-income-plot');
                     const newFigure = JSON.parse(data.plot_data);
                     Plotly.react(plotDiv, newFigure.data, newFigure.layout);
                 }

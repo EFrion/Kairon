@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, session, redirect, url_fo
 import json
 import os
 from app.utils import plotting_utils, storage_utils, finance_data
-from app.models import Asset, Portfolio, PortfolioManager
+from app.models import Asset, Portfolio, PortfolioManager, PortfolioLoader
 
 bp = Blueprint('portfolio', __name__)
 
@@ -25,60 +25,35 @@ def get_full_portfolio_data():
     asset_classes = ['stocks', 'crypto'] # Only two asset classes for now. TODO
     portfolios = {}
     
-    free_cash = storage_utils.load_cash() # Load the cash data
-
     for asset_type in asset_classes:
         tickers = get_assets(asset_type)
         # Note: force_update=False here to load old data first, then update
         raw_metrics = finance_data.fetch_latest_metrics(tickers, asset_type, interval='4h', force_update=False)
         
-        # Load shares and prices from storage_utils
-        shares  = storage_utils.load_shares(asset_type)
-        avg_price  = storage_utils.load_prices(asset_type)
-        env = storage_utils.load_env(asset_type)
-        soc = storage_utils.load_soc(asset_type)
-        gov = storage_utils.load_gov(asset_type)
-        cont = storage_utils.load_cont(asset_type)
+        # Load external data (HTML forms)
+        data = PortfolioLoader.load_asset_data(asset_type)
                 
         assets = [
             Asset(
                 ticker=t,
                 metrics=next(m for m in raw_metrics if m['Ticker']==t),
-                shares=shares.get(t, 0),
-                avg_price=avg_price.get(t, 0),
-                env=env.get(t, 0),
-                soc=soc.get(t, 0),
-                gov=gov.get(t, 0),
-                cont=cont.get(t, 0)
+                shares=data['shares'].get(t, 0),
+                avg_price=data['avg_price'].get(t, 0),
+                env=data['env'].get(t, 0),
+                soc=data['soc'].get(t, 0),
+                gov=data['gov'].get(t, 0),
+                cont=data['cont'].get(t, 0)
             ) for t in tickers
         ]
         
         portfolios[asset_type] = Portfolio(assets)
         
-        
-    print("portfolios:" , portfolios)
-    
-    portfolio = PortfolioManager(portfolios)
-    print("portfolio: ", portfolio)
-    
-    total_market_value = sum(p.total_market_value for p in portfolio.values())
-    grand_total_cost_basis = sum(p.total_cost_basis for p in portfolio.values())
-    grand_total_with_cash = total_market_value + free_cash # Total portfolio value
-
-    # Generate the dividend plot (stocks only)    
-    stock_shares_dict = {assets.ticker: assets.shares for assets in portfolio.stocks.assets}
-    stock_metrics_list = [assets.metrics for assets in portfolio.stocks.assets]
-    dividend_plot = create_monthly_dividends_plot(stock_metrics_list, stock_shares_dict)
+    portfolio = PortfolioManager(portfolios, free_cash=storage_utils.load_cash())
+    income_plot = plotting_utils.create_income_plot(portfolio.total_income_data)
 
     return {
         'portfolio': portfolio,
-        'total_market_value': total_market_value,
-        'total_cost_basis': grand_total_cost_basis,
-        'grand_total_with_cash': grand_total_with_cash,
-        'free_cash_value': free_cash,
-        'monthly_div_plot': dividend_plot,
-        'monthly_payment_counts': portfolio.stocks.monthly_dividend_data.counts,
-        'total_monthly_dividend_payout': portfolio.stocks.monthly_dividend_data.payouts
+        'income_plot': income_plot.to_html(full_html=False, include_plotlyjs='cdn')
     }
 
 def get_assets(asset_class='stocks'):
@@ -106,16 +81,6 @@ def get_assets(asset_class='stocks'):
     print("get_assets out")
     return defaults.get(asset_class, [])
 
-
-def create_monthly_dividends_plot(stock_metrics, current_shares):
-    """
-    Generates HTML code for the initial dividend plot (should be updated to pio)
-    """
-    # Call the utility function to get the figure object
-    fig = plotting_utils.create_monthly_dividends_figure(stock_metrics, current_shares)
-    
-    # Return the HTML string that can be inserted directly into the template
-    return fig.to_html(full_html=False, include_plotlyjs='cdn')  #TODO change to json
     
 @bp.route('/update_portfolio_cache', methods=['POST'])
 def update_portfolio_cache():

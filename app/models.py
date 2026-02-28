@@ -1,5 +1,7 @@
 from types import SimpleNamespace
+from app.utils import storage_utils
 
+# Define a single asset (one per ticker)
 class Asset:
     def __init__(self, ticker, metrics, shares=0.0, avg_price=0.0, env=0, soc=0, gov=0, cont=0):
         self.ticker = ticker
@@ -36,9 +38,8 @@ class Asset:
     def asset_income(self):
         return self.market_value * self.div_yield
         
-    def get_monthly_dividend(self):
-        if self.shares <= 0 or self.latest_div <= 0:
-            return [0.0] * 12
+    def get_monthly_income(self):
+        if not hasattr(self, 'months_paid'): return [0.0] * 12
             
         return [self.latest_div * self.shares if m == 1 else 0.0 for m in self.months_paid]
         
@@ -68,7 +69,7 @@ class Asset:
     def __repr__(self):
         return f"Asset({self.ticker}, MarketValue={self.market_value:.2f})"
         
-        
+# Define a portfolio of a given asset type (stocks, crypto, etc...)        
 class Portfolio:
     def __init__(self, assets):
         self.assets = assets
@@ -82,25 +83,38 @@ class Portfolio:
         return sum(asset.cost_basis for asset in self.assets)
         
     @property
-    def monthly_dividend_data(self):
+    def monthly_income_data(self):
         payouts = [0.0]*12
         counts = [0] * 12
+        details = [[] for _ in range(12)] # List of lists to store stock details per month
         
         for asset in self.assets:
-            asset_payouts = asset.get_monthly_dividend()
+            asset_payouts = asset.get_monthly_income()
             for i in range(12):
-                if asset.months_paid[i]==1:
+                if asset_payouts[i] > 0:
+                    payouts[i] += asset_payouts[i]
                     counts[i] += 1
-                payouts[i] += asset_payouts[i]
+                    details[i].append(f"{asset.ticker}: €{asset_payouts[i]:.2f}") # Details for hovering in plot
 
+        # Process details to include the total income in plot
+        final_details = []
+        for i in range(12):
+            if payouts[i] > 0:
+                # Combine the ticker list and add the total header
+                ticker_list = "<br>".join(details[i])
+                final_details.append(f"<b>Total: €{payouts[i]:.2f}</b><br><br>{ticker_list}")
+            else:
+                final_details.append("No Income")
+                
         return SimpleNamespace(
             payouts = payouts,
-            counts = counts
+            counts = counts,
+            details = final_details
         )
         
     @property
     def annual_dividends(self):
-        return sum(self.monthly_dividend_data.payouts)
+        return sum(self.monthly_income_data.payouts)
     
     @property
     def portfolio_yield_data(self):
@@ -136,24 +150,72 @@ class Portfolio:
             'assets': [a.to_dict() for a in self.assets],
             'total_market_value': self.total_market_value,
             'total_cost_basis': self.total_cost_basis,
-            'monthly_dividend_data': vars(self.monthly_dividend_data), # vars is used to extract dicts from object instance
+            'monthly_income_data': vars(self.monthly_income_data), # vars is used to extract dicts from object instance
             'annual_dividends': self.annual_dividends,
             'portfolio_yield_data': vars(self.portfolio_yield_data),
             'sectors': vars(self.sectors)
         }
 
     def __repr__(self):
-        return f"Portfolio(Assets={len(self.assets)}, TotalValue={self.total_market_value:.2f})"
+        return f"Portfolio(Assets={len(self.assets)}, TotalValue=€{self.total_market_value:.2f})"
+
+# Load external data into a portfolio
+class PortfolioLoader:
+    @staticmethod
+    def load_asset_data(asset_type):
+        return {
+            'shares': storage_utils.load_shares(asset_type),
+            'avg_price': storage_utils.load_prices(asset_type),
+            'env': storage_utils.load_env(asset_type),
+            'soc': storage_utils.load_soc(asset_type),
+            'gov': storage_utils.load_gov(asset_type),
+            'cont': storage_utils.load_cont(asset_type)
+        }
 
 
-
+# Define the complete portfolio
 class PortfolioManager:
-    def __init__(self, portfolios_dict):
+    def __init__(self, portfolios_dict, free_cash=0.0, silent=False):
         self._portfolios = portfolios_dict
+        self.free_cash = free_cash
         # Set attributes based on asset classes (stocks, crypto, etc.)
         for name, portfolio_obj in portfolios_dict.items():
             setattr(self, name, portfolio_obj)
             
+        # Show summary
+        if not silent:
+            print(self)
+            
+    @property
+    def total_market_value(self):
+        return sum(p.total_market_value for p in self._portfolios.values())
+            
+    @property
+    def grand_total_cost_basis(self):
+        return sum(p.total_cost_basis for p in self._portfolios.values())
+        
+    @property
+    def grand_total_with_cash(self):
+        return self.total_market_value + self.free_cash
+        
+    @property
+    def total_income_data(self):
+        grand_total = [0.0] * 12
+        grand_details = [[] for _ in range(12)]
+        
+        for portfolio in self.values():
+            report = portfolio.monthly_income_data
+            for i in range(12):
+                grand_total[i] += report.payouts[i]
+                if report.payouts[i] > 0:
+                    # Add a header for the asset class in the hover text
+                    grand_details[i].append(report.details[i])
+                    
+        return {
+            "payouts": grand_total,
+            "details": ["<br>".join(d) for d in grand_details]
+        }
+    
     def __iter__(self):
         return iter(self._portfolios)
         
@@ -167,10 +229,37 @@ class PortfolioManager:
         return self._portfolios.items()
         
     def to_dict(self):
-        return {name: p.to_dict() for name, p in self.items()}
+        data = {name: p.to_dict() for name, p in self.items()}
+        data['summary'] = {
+            'total_market_value': self.total_market_value,
+            'grand_total_cost_basis': self.grand_total_cost_basis,
+            'grand_total_with_cash': self.grand_total_with_cash,
+            'free_cash': self.free_cash,
+            'total_income_data': self.total_income_data
+        }
+        return data
             
     def __repr__(self):
-        return f"PortfolioManager(Portfolios={len(self._portfolios)})"
+        count = 60
+        # Header
+        lines = [
+            "\n" + "="*count,
+            "PORTFOLIO SUMMARY",
+            "="*count
+        ]
+        
+        # Add each sub-portfolio
+        for name, p in self._portfolios.items():
+            lines.append(f" • {name.upper():<8}: {p.__repr__()}")
+            
+        # Add Global Totals
+        lines.append("-" * count)
+        lines.append(f" CASH       : €{self.free_cash:,.2f}")
+        lines.append(f" TOTAL MV   : €{self.total_market_value:,.2f}")
+        lines.append(f" GRAND TOTAL: €{self.grand_total_with_cash:,.2f}")
+        lines.append("="*count + "\n")
+        
+        return "\n".join(lines)
 
 
 

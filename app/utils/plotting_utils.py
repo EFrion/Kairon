@@ -129,69 +129,25 @@ def plot_efficient_frontier_and_portfolios(
     
     return fig
 
-def create_monthly_dividends_figure(stock_metrics, current_shares):
-    """
-    Interactive Plotly bar chart showing total monthly dividend payout.
-    
-    Args:
-        stock_metrics (list): List of dictionaries with stock data.
-        current_shares (dict): Dictionary of current share counts.
-        
-    Returns:
-        str: HTML code for the Plotly graph object.
-    """
+def create_income_plot(income_data, title="Expected monthly income"):
     months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    monthly_payout = [0.0] * 12
-    hover_text = [[] for _ in range(12)] # List of lists to store stock details per month
-
-    # Aggregate data and hover information
-    for stock in stock_metrics:
-        ticker = stock['Ticker']
-        shares = current_shares.get(ticker, 0)
-        
-        if shares > 0:
-            latest_div = stock.get('Latest_Div_EUR', 0.0)
-            months_paid = stock.get('Months_Paid', [0] * 12)
-            
-            payout_amount = latest_div * shares
-            
-            for i in range(12):
-                if months_paid[i] == 1:
-                    monthly_payout[i] += payout_amount
-                    
-                    # Store data
-                    hover_text[i].append(
-                        f"{ticker}: €{payout_amount:.2f} ({shares} shares)"
-                    )
-
-    # Combine the list of stocks into a single string
-    final_hover_text = []
-    for i, amounts in enumerate(hover_text):
-        if monthly_payout[i] > 0:
-            # Join the list of stock details with line breaks for the tooltip
-            details = "<br>".join(amounts)
-            final_hover_text.append(f"<b>Total: €{monthly_payout[i]:.2f}</b><br><br>Contributing Stocks:<br>{details}")
-        else:
-            final_hover_text.append("No Payout")
-
 
     # Create Plotly figure
     fig = go.Figure(data=[
         go.Bar(
             x=months,
-            y=monthly_payout,
-            marker_color=['#28a745' if amount > 0 else '#cccccc' for amount in monthly_payout],
-            hovertext=final_hover_text,
-            hovertemplate='%{hovertext}<extra></extra>', # Custom hover text
-            name="Monthly Dividend Payout"
+            y=income_data['payouts'],
+            marker_color=['#28a745' if amount > 0 else '#cccccc' for amount in income_data['payouts']],
+            hovertext=income_data['details'],
+            hovertemplate='%{hovertext}<extra></extra>', # <extra></extra> removes the secondary 'trace' box
+            name=title
         )
     ])
 
     # Update layout for a non-static look
     fig.update_layout(
-        title='Total Expected Monthly Dividend Income (€)',
+        title=title + ' (€)',
         xaxis_title='Month',
-        yaxis_title='Expected Dividend Payout (€)',
         hovermode="x unified",
         margin=dict(l=20, r=20, t=50, b=20)
     )
