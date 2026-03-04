@@ -159,7 +159,7 @@ input {
     text-overflow: ellipsis;
 }
 
-[id^="avg_price"] {
+[id^="avg_price"], [id^="shares"] {
     width: 15ch;
 }
 
