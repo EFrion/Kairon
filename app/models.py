@@ -1,14 +1,41 @@
 from types import SimpleNamespace
+from dataclasses import dataclass, field
+from typing import List, Dict, Any
 from app.utils import storage_utils
-    
+
+@dataclass
+class AssetData:
+    ticker: str
+    metrics: Dict[str, Any]
+    asset_type: str = 'stocks'
+    shares: float = 0.0
+    avg_price: float = 0.0
+    env: int = 0
+    soc: int = 0
+    gov: int = 0
+    cont: int = 0
+    weight: float = 0.0
+
+    sector: str = field(init=False, default="Null")
+    months_paid: List[int] = field(init=False, default_factory=lambda: [0]*12)
+    quote: float = field(init=False, default=0.0)
+    quote_eur: float = field(init=False, default=0.0)
+    latest_div: float = field(init=False, default=0.0)
+    div_yield: float = field(init=False, default=0.0)
+    div_growth: float = field(init=False, default=0.0)
+    pe_ratio: float = field(init=False, default=0.0)
+    fwd_pe: float = field(init=False, default=0.0)
+    peg: float = field(init=False, default=0.0)
+    pb_ratio: float = field(init=False, default=0.0)
+    bench_pb: float = field(init=False, default=0.0)
+    earnings_gr: float = field(init=False, default=0.0)
+    payout_ratio: float = field(init=False, default=0.0)
+
 # Define a single asset (one per ticker)
-class Asset:
-    def __init__(self, ticker, metrics, asset_type='stocks', shares=0.0, avg_price=0.0, env=0, soc=0, gov=0, cont=0):
-        self.ticker = ticker
-        self.asset_type = asset_type
-        self.metrics = metrics
-        self.shares = float(shares)
-        self.avg_price = float(avg_price)
+@dataclass
+class Asset(AssetData):
+    def __post_init__(self):
+        metrics = self.metrics
         self.sector = metrics.get("Sector", "Null")
         self.quote = self._safe_float(metrics.get("Quote"))
         self.quote_eur = self._safe_float(metrics.get("Quote_EUR"))
@@ -23,12 +50,28 @@ class Asset:
         self.bench_pb = self._safe_float(metrics.get('Sector_PB_Benchmark',0))
         self.earnings_gr = self._safe_float(metrics.get('Earnings_Growth',0)*100)
         self.payout_ratio = self._safe_float(metrics.get('PayoutRatio',0)*100)
-        self.env = int(env)
-        self.soc = int(soc)
-        self.gov = int(gov)
-        self.cont = int(cont)
-        self.weight = 0.0
         
+    METRIC_COLOUR_RULES = {
+        'stocks':{
+            'pe_ratio': {'low': 10,  'high': 20, 'dir': 'low_is_better'},
+            'fwd_pe': {'low': 10,  'high': 20, 'dir': 'low_is_better'},
+            'earnings_gr': {'low': 0,  'high': 0, 'dir': 'high_is_better'},
+            'peg': {'low': 0.9,  'high': 1, 'dir': 'low_is_better'},
+            'div_yield': {'low': 2, 'high': 4, 'dir': 'high_is_better'},
+            'div_growth': {'low': 4, 'high': 8, 'dir': 'high_is_better'},
+            'payout_ratio': {'low': 90, 'high': 100, 'dir': 'low_is_better'},
+            'env': {'low': 4,   'high': 6,  'dir': 'high_is_better'},
+            'soc': {'low': 4,   'high': 6,  'dir': 'high_is_better'},
+            'gov': {'low': 4,   'high': 6,  'dir': 'high_is_better'},
+            'cont': {'low': 4,   'high': 6,  'dir': 'high_is_better'},
+            'pb_ratio': {'low': 'bench_pb', 'high': 'bench_pb', 'dir': 'low_is_better'},
+            'weight': {'low': 4, 'high': 5, 'dir': 'low_is_better'}
+        },
+        'crypto':{
+            'weight': {'low': 40, 'high': 50, 'dir': 'low_is_better'}
+        } 
+    }
+
     # Ensure floats are retrieved from data
     def _safe_float(self, val):
         try:
@@ -61,36 +104,26 @@ class Asset:
     
     # Determine background colour. TODO: give user choice instead of hard coding
     def get_metric_config(self, metric_name):
-        # Conditional rule
-        if self.asset_type == 'crypto':
-            weight_rules = {'low': 40, 'high': 50, 'dir': 'low_is_better'}
-        else:
-            weight_rules = {'low': 4, 'high': 5, 'dir': 'low_is_better'}
 
-        # Fixed rules
-        rules = {
-            'pe_ratio': {'val': self.pe_ratio, 'low': 10,  'high': 20, 'dir': 'low_is_better'},
-            'fwd_pe': {'val': self.fwd_pe,   'low': 10,  'high': 20, 'dir': 'low_is_better'},
-            'earnings_gr': {'val': self.earnings_gr,   'low': 0,  'high': 0, 'dir': 'high_is_better'},
-            'peg': {'val': self.peg,   'low': 0.9,  'high': 1, 'dir': 'low_is_better'},
-            'div_yield': {'val': self.div_yield, 'low': 2, 'high': 4, 'dir': 'high_is_better'},
-            'div_growth': {'val': self.div_growth, 'low': 4, 'high': 8, 'dir': 'high_is_better'},
-            'payout_ratio': {'val': self.payout_ratio, 'low': 90, 'high': 100, 'dir': 'low_is_better'},
-            'env': {'val': self.env,      'low': 4,   'high': 6,  'dir': 'high_is_better'},
-            'soc': {'val': self.soc,      'low': 4,   'high': 6,  'dir': 'high_is_better'},
-            'gov': {'val': self.gov,      'low': 4,   'high': 6,  'dir': 'high_is_better'},
-            'cont': {'val': self.cont,     'low': 4,   'high': 6,  'dir': 'high_is_better'},
-            'pb_ratio': {'val': self.pb_ratio, 'low': self.bench_pb, 'high': self.bench_pb, 'dir': 'low_is_better'},
-            'weight': {'val': self.weight, **weight_rules}
-        }
+        rules = self.METRIC_COLOUR_RULES.get(self.asset_type, {}).get(metric_name.lower())
 
-        config = rules.get(metric_name.lower())
-        if not config:
-            return {'val': 0, 'class': ''}
+        if not rules:
+            return {'val': getattr(self, metric_name, 0), 'class': ''}
+        
+        # Resolve string thresholds
+        low = rules['low']
+        if isinstance(low, str):
+            low = getattr(self, low, 0)
+            
+        high = rules['high']
+        if isinstance(high, str):
+            high = getattr(self, high, 0)
+
+        val = getattr(self, metric_name, 0)
 
         return {
-            'val': config['val'],
-            'class': calculate_color(config['val'], config['low'], config['high'], config['dir'])
+            'val': val,
+            'class': calculate_color(val, low, high, rules['dir'])
         }
     
     # Define schema for the HTML renderer
@@ -144,20 +177,8 @@ class Asset:
             'annual_dividend': self.annual_dividend,
             'asset_income': self.asset_income,
             'status_colors': {
-                'weight': self.get_metric_config('weight')['class'],
-                'pe_ratio': self.get_metric_config('pe_ratio')['class'],
-                'fwd_pe': self.get_metric_config('fwd_pe')['class'],
-                'earnings_gr': self.get_metric_config('earnings_gr')['class'],
-                'peg': self.get_metric_config('peg')['class'],
-                'pb_ratio': self.get_metric_config('pb_ratio')['class'],
-                'div_yield': self.get_metric_config('div_yield')['class'],
-                'div_growth': self.get_metric_config('div_growth')['class'],
-                'payout_ratio': self.get_metric_config('payout_ratio')['class'],
-                'weight': self.get_metric_config('weight')['class'],
-                'env': self.get_metric_config('env')['class'],
-                'soc': self.get_metric_config('soc')['class'],
-                'gov': self.get_metric_config('gov')['class'],
-                'cont': self.get_metric_config('cont')['class']
+                m: self.get_metric_config(m)['class']
+                for m in self.METRIC_COLOUR_RULES.get(self.asset_type, {}).keys()
             }
         })
         return data
@@ -167,7 +188,7 @@ class Asset:
         
 # Define a portfolio of a given asset type (stocks, crypto, etc...)        
 class Portfolio:
-    def __init__(self, assets):
+    def __init__(self, assets: List[Asset]):
         self.assets = assets
         self.update_weights()
 
