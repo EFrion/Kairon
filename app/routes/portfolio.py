@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, session, redirect, url_fo
 import json
 import os
 from app.utils import plotting_utils, storage_utils, finance_data
-from app.models import Asset, Portfolio, PortfolioManager, PortfolioLoader
+from app.models import PortfolioManager
 
 bp = Blueprint('portfolio', __name__)
 
@@ -10,7 +10,7 @@ bp = Blueprint('portfolio', __name__)
 @bp.route('/', methods=['GET', 'POST'])   
 def portfolio_feature():
     
-    data = get_full_portfolio_data()
+    data = get_portfolio_data()
     #print("Weight: ", data['portfolio'].stocks.assets[0].weight)
     
     return render_template(
@@ -20,35 +20,17 @@ def portfolio_feature():
         income_plot=data['income_plot'].to_html(full_html=False, include_plotlyjs='cdn')
     )
     
-def get_full_portfolio_data():
-    asset_classes = ['stocks', 'crypto'] # Only two asset classes for now. TODO
-    portfolios = {}
-    
-    for asset_type in asset_classes:
-        tickers = get_assets(asset_type)
-        # Note: force_update=False here to load old data first, then update
-        raw_metrics = finance_data.fetch_latest_metrics(tickers, asset_type, interval='4h', force_update=False)
-        
-        # Load external data (HTML forms)
-        data = PortfolioLoader.load_asset_data(asset_type)
-                
-        assets = [
-            Asset(
-                ticker=t,
-                metrics=next(m for m in raw_metrics if m['Ticker']==t),
-                asset_type=asset_type,
-                shares=data['shares'].get(t, 0),
-                price=data['price'].get(t, 0),
-                env=data['env'].get(t, 0),
-                soc=data['soc'].get(t, 0),
-                gov=data['gov'].get(t, 0),
-                cont=data['cont'].get(t, 0)
-            ) for t in tickers
-        ]
-        
-        portfolios[asset_type] = Portfolio(assets)
-        
-    portfolio = PortfolioManager(portfolios, free_cash=storage_utils.load_cash())
+def get_portfolio_data(force_update=False):
+
+    # TODO automatic asset classes handling
+    portfolio = PortfolioManager.from_storage(
+        asset_classes=['stocks', 'crypto'],
+        storage_utils=storage_utils,
+        finance_data=finance_data,
+        interval='4h',
+        force_update=force_update
+    )
+
     income_plot = plotting_utils.create_income_plot(portfolio.total_income_data)
 
     return {
@@ -56,45 +38,13 @@ def get_full_portfolio_data():
         'income_plot': income_plot
     }
 
-def get_assets(asset_class='stocks'):
-    #print("get_assets called")
-    
-    # Paths look like 'data/stocks_list.json'
-    data_dir = current_app.config['DATA_FOLDER']
-    path = os.path.join(data_dir,f"{asset_class}_list.json")
-    
-    if os.path.exists(path) and os.path.getsize(path) > 0: # Ensure path exists and file isn't empty
-        try:
-            with open(path, 'r') as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError) as e:
-            print(f"File error, returning defaults: {e}")
-    
-    # Defaults based on type
-    defaults = {
-        'stocks': ["AMAT", "AMT", "AMUN.PA"],
-        'crypto': ["BTC-USD", "ETH-USD"]#,
-        #'bonds': ["BND"],
-        #'commodities': ["GC=F"] # Gold TODO
-    }
-    
-    print("get_assets out")
-    return defaults.get(asset_class, [])
-
-    
+# TODO remove this function
 @bp.route('/update_portfolio_cache', methods=['POST'])
 def update_portfolio_cache():
     """
         Loads cached data when app opens.
-    """
-    asset_classes = ['stocks', 'crypto'] #TODO
-    for asset_type in asset_classes:
-        tickers = get_assets(asset_type)
-        # Here call the function with force_update=True to trigger the update logic
-        metrics = finance_data.fetch_latest_metrics(  tickers, asset_type,
-                                            interval='4h', force_update=True)
-                                            
-    data = get_full_portfolio_data()
+    """                       
+    data = get_portfolio_data(force_update=True)
         
     return jsonify({
         'portfolio': data['portfolio'].to_dict(),
@@ -106,21 +56,8 @@ def update_portfolio_data(asset_type):
     """
         Update data when app is running.
     """
-    print(f"update_portfolio_data called for {asset_type}")
-    
-    # Get data from the AJAX request body
-    data = request.get_json()
-    
-    ticker_list = get_assets(asset_type)
-    # Update metrics if necessary
-    metrics = finance_data.fetch_latest_metrics(ticker_list, asset_type,
-                                                interval='4h', force_update=True)
-    
-    data = get_full_portfolio_data()
-    #print("Weight: ", data['portfolio'].stocks.assets[0].weight)
-    
-    print("update_portfolio_data out")
-    
+    data = get_portfolio_data(force_update=True)
+
     return jsonify({
         'portfolio': data['portfolio'].to_dict(),
         'income_plot': data['income_plot'].to_json()
@@ -182,7 +119,7 @@ def add_asset(asset_class):
     print("add_asset called")
     ticker = request.form.get('ticker', '').upper().strip()
     if ticker:
-        assets = get_assets(asset_class)
+        assets = storage_utils.get_assets(asset_class)
         if ticker not in assets:
             assets.append(ticker)
             save_assets(assets, asset_class)
@@ -201,7 +138,7 @@ def save_assets(asset_list, asset_class='stocks'):
 @bp.route('/delete/<asset_class>/<ticker>', methods=['POST'])
 def delete_asset(asset_class, ticker):
     print(f"delete_asset called for: {asset_class}/{ticker}")
-    assets = get_assets(asset_class)
+    assets = storage_utils.get_assets(asset_class)
     
     if ticker in assets:
         # Remove from main asset list

@@ -92,115 +92,24 @@
         <table>
             <thead>
                 <tr>
-                    <th>Sharpe</th>
-                    <th>Semivariance</th>
-                    <th>Sortino</th>
-                    <th>Symmetry score</th>
-                    <th>D'Agostino-Pearson statistics</th>
-                    <th>D'Agostino-Pearson p-value</th>
-                    <th>Jarque-Bera statistics</th>
-                    <th>Jarque-Bera p-value</th>
-                    <th>Z-score max</th>
-                    <th>Z-score min</th>
-                    <th>Number outliers</th>
+                    <th>Ticker</th>
+                    {% for col in analysis.schema %}
+                        <th>{{ col.label }}</th>
+                    {% endfor %}
                 </td>
             </thead>
             
             <tbody>
-                <tr>
-                    {% for metric_name, metric_data in individual_metrics.items() %}
-                    <td>
-                        <span id="{{ metric_name }}-display">
-                            {% if metric_data[selected_ticker] is defined %}
-                                {{ "%.2e"|format(metric_data[selected_ticker]) }}
-                            {% else %}
-                                0.0
-                            {% endif %}
-                        </span>
-                    </td>
-                    {% endfor %}
-
-                    <td>
-                        <span id="symmetry-score-display">
-                            {% if symmetry_score is defined %}
-                                {{ "%.2f"|format(symmetry_score) }}
-                            {% else %}
-                                0.0
-                            {% endif %}
-                        </span>%
-                    </td>
-
-                    <td>
-                        <span id="dagostino_pearson_statistics-display">
-                            {% if dagostino_pearson_statistics is defined %}
-                                {{ "%.2f"|format(dagostino_pearson_statistics) }}
-                            {% else %}
-                                0.0
-                            {% endif %}
-                        </span>
-                    </td>
-
-                    <td>
-                        <span id="dagostino_pearson_pvalue-display">
-                            {% if dagostino_pearson_pvalue is defined %}
-                                {{ "%.2e"|format(dagostino_pearson_pvalue) }}
-                            {% else %}
-                                0.0
-                            {% endif %}
-                        </span>
-                    </td>
-
-                    <td>
-                        <span id="jarque_bera_statistics-display">
-                            {% if jarque_bera_statistics is defined %}
-                                {{ "%.2f"|format(jarque_bera_statistics) }}
-                            {% else %}
-                                0.0
-                            {% endif %}
-                        </span>
-                    </td>
-
-                    <td>
-                        <span id="jarque_bera_pvalue-display">
-                            {% if jarque_bera_pvalue is defined %}
-                                {{ "%.2e"|format(jarque_bera_pvalue) }}
-                            {% else %}
-                                0.0
-                            {% endif %}
-                        </span>
-                    </td>
-                    
-                    <td>
-                        <span id="z_score_max-display">
-                            {% if z_score_max is defined %}
-                                {{ "%.2f"|format(z_score_max) }}
-                            {% else %}
-                                0.0
-                            {% endif %}
-                        </span>
-                    </td>
-                    
-                    <td>
-                        <span id="z_score_min-display">
-                            {% if z_score_min is defined %}
-                                {{ "%.2f"|format(z_score_min) }}
-                            {% else %}
-                                0.0
-                            {% endif %}
-                        </span>
-                    </td>
-                    
-                    <td>
-                        <span id="len_outliers-display">
-                            {% if len_outliers is defined %}
-                                {{ len_outliers }}
-                            {% else %}
-                                0
-                            {% endif %}
-                        </span>
-                    </td>
-                </tr>
-            <tbdody>
+                {% for ticker, metrics in analysis.assets.items() %}
+                    <tr class="ticker-row {% if ticker == selected_ticker %}active-row{% endif %}" 
+                        onclick="currentTicker='{{ ticker }}'; updateView();">
+                        <td style="font-weight: bold;">{{ ticker }}</td>
+                        {% for col in analysis.schema %}
+                            <td>{{ metrics[col.id] | format_finance }} {{ col.suffix }}</td>
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
         </table>
 
         
@@ -208,278 +117,205 @@
     
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Portfolio variables
-            let portfolioMode = "returns"; // Default portfolio mode
-            const portfolioTabs = document.querySelectorAll('.portfolio-tab');
-            const loader = document.getElementById('loader');
-            const refreshBtn = document.getElementById('refresh-frontier-btn');
-            
-            // Tickers variables
-            let currentTicker = "{{ selected_ticker }}";
-            let secondaryTicker = "";
-            let currentMode = "price"; // Default ticker mode
-            const tabs = document.querySelectorAll('.tab');
-            const tickerRows = document.querySelectorAll('.ticker-row');
+        class PortfolioApp {
+            constructor() {
+                // State Management
+                this.state = {
+                    currentTicker: "{{ selected_ticker }}",
+                    secondaryTicker: "",
+                    currentMode: "price",
+                    portfolioMode: "returns"
+                };
 
-            updateView();
-            updatePortfolioView();
-            
-            // Portfolio logic
-            function updatePortfolioView(force = false) {
-                // Show loader, hide plot
-                loader.classList.remove('hidden');
-                
-                // Show/hide refresh button only for frontier
-                if (portfolioMode === 'efficient_frontier') {
-                    refreshBtn.classList.remove('invisible-placeholder');
-                } else {
-                    refreshBtn.classList.add('invisible-placeholder');
-                }
-        
-                const container = document.getElementById('portfolio-plot-container');
-                const title = document.getElementById('portfolio-chart-title');
-                
-                title.innerText = `${portfolioMode.toUpperCase().replace(/[^A-Z ]/g, ' ')}`;
+                // DOM Elements
+                this.dom = {
+                    loader: document.getElementById('loader'),
+                    refreshBtn: document.getElementById('refresh-frontier-btn'),
+                    portfolioContainer: document.getElementById('portfolio-plot-container'),
+                    tickerContainer: document.getElementById('price-plot-container'),
+                    portfolioTitle: document.getElementById('portfolio-chart-title'),
+                    tickerTitle: document.getElementById('chart-title'),
+                    tickerRows: document.querySelectorAll('.ticker-row'),
+                    portfolioTabs: document.querySelectorAll('.portfolio-tab'),
+                    tickerTabs: document.querySelectorAll('.tab')
+                };
 
-                const url = `/get_portfolio_data?mode=${portfolioMode}&force_update=${force}`;
-                
-                // Fetching data for the whole portfolio
-                fetch(url)
-                    .then(res => res.json())
-                    .then(data => {
-                        loader.classList.add('hidden'); // Hide loader
-                        const config = (portfolioMode === 'heatmap') ? { displayModeBar: false } : {};
-                        Plotly.react(container, data.fig_data.data, data.fig_data.layout, config);
-                    })
-                    .catch(err => {
-                        loader.classList.add('hidden');
-                        console.error("Portfolio plot error:", err);
-                    });
-            }
-            
-            // Refresh button listener
-            refreshBtn.addEventListener('click', () => updatePortfolioView(true));
-
-            // Portfolio tab click listener
-            portfolioTabs.forEach(tab => {
-                tab.addEventListener('click', function() {
-                    portfolioTabs.forEach(t => t.classList.remove('portfolio-active-tab'));
-                    this.classList.add('portfolio-active-tab');
-                    
-                    portfolioMode = this.dataset.mode;
-                    updatePortfolioView(false); // Use cache by default
-                });
-            });
-            
-            // Individual ticker logic
-            function updateView() {
-                // Here we update the fetch URL to include the mode
-                // Example: /get_data?ticker=AAPL&mode=price
-                document.getElementById('chart-title').innerText = currentTicker;
-                
-                console.log(`Fetching ${currentMode} for ${currentTicker}`);
-                
-                let url = `/get_data?ticker=${currentTicker}&mode=${currentMode}`;
-                
-                if (currentMode === 'map-2dcorr' && secondaryTicker) {
-                    url += `&ticker2=${secondaryTicker}`;
-                }
-                
-                const container = document.getElementById('price-plot-container');
-                
-                fetch(url)
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        // Plotly.react updates an existing plot if it's there.
-                        Plotly.react(container, data.fig_data.data, data.fig_data.layout);
-                        
-                        // Update Sharpe ratio
-                        const sharpeRatio = document.getElementById('sharpe-display');
-                        if (sharpeRatio && data.sharpe) {
-                            sharpeRatio.innerText = data.sharpe;
-                        }
-                        
-                        // Update semivariance
-                        const semivariance = document.getElementById('semivariance-display');
-                        if (semivariance && data.semivariance) {
-                            semivariance.innerText = data.semivariance;
-                        }
-                        
-                        // Update Sortino ratio
-                        const sortinoRatio = document.getElementById('sortino-display');
-                        if (sortinoRatio && data.sortino) {
-                            sortinoRatio.innerText = data.sortino;
-                        }
-                        
-                        // Update symmetry score
-                        const symmetryScore = document.getElementById('symmetry-score-display');
-                        if (symmetryScore && data.symmetry_score) {
-                            symmetryScore.innerText = data.symmetry_score;
-                        }
-                        
-                        // Update D'Agostino-Pearson statistics
-                        const dagostino_pearson_statistics = document.getElementById('dagostino_pearson_statistics-display');
-                        if (dagostino_pearson_statistics && data.dagostino_pearson_statistics) {
-                            dagostino_pearson_statistics.innerText = data.dagostino_pearson_statistics;
-                        }
-                        
-                        // Update D'Agostino-Pearson p-value
-                        const dagostino_pearson_pvalue = document.getElementById('dagostino_pearson_pvalue-display');
-                        if (dagostino_pearson_pvalue && data.dagostino_pearson_pvalue) {
-                            dagostino_pearson_pvalue.innerText = data.dagostino_pearson_pvalue;
-                        }
-                        
-                        // Update Jarque-Bera statistics
-                        const jarque_bera_statistics = document.getElementById('jarque_bera_statistics-display');
-                        if (jarque_bera_statistics && data.jarque_bera_statistics) {
-                            jarque_bera_statistics.innerText = data.jarque_bera_statistics;
-                        }
-                        
-                        // Update Jarque-Bera p-value
-                        const jarque_bera_pvalue = document.getElementById('jarque_bera_pvalue-display');
-                        if (jarque_bera_pvalue && data.jarque_bera_pvalue) {
-                            jarque_bera_pvalue.innerText = data.jarque_bera_pvalue;
-                        }
-                        
-                        // Update z-score max
-                        const z_score_max = document.getElementById('z_score_max-display');
-                        if (z_score_max && data.z_score_max) {
-                            z_score_max.innerText = data.z_score_max;
-                        }
-                        
-                        // Update z-score min
-                        const z_score_min = document.getElementById('z_score_min-display');
-                        if (z_score_min && data.z_score_min) {
-                            z_score_min.innerText = data.z_score_min;
-                        }
-                        
-                        // Update number of outliers
-                        const len_outliers = document.getElementById('len_outliers-display');
-                        if (len_outliers && data.len_outliers) {
-                            len_outliers.innerText = data.len_outliers;
-                        }
-                    })
-                    .catch(err => {
-                        console.error("Plotly Error:", err);
-                        container.innerHTML = '<p style="color:red;">Error loading chart.</p>';
-                    });
+                this.init();
             }
 
-            // Tab click logic
-            tabs.forEach(tab => {
-                tab.addEventListener('click', function() {
-                    // Manage tab classes
-                    tabs.forEach(t => t.classList.remove('active-tab'));
-                    this.classList.add('active-tab');
-                    
-                    // Update global mode
-                    currentMode = this.dataset.mode;
-                    
-                    // If switching to correlation, ensure there's a partner stock
-                    if (currentMode === 'map-2dcorr' && !secondaryTicker) {
-                        // Find the first ticker in the sidebar that isn't the current primary one
-                        const firstOtherRow = [...tickerRows].find(r => r.dataset.ticker !== currentTicker);
-                        if (firstOtherRow) {
-                            secondaryTicker = firstOtherRow.dataset.ticker;
-                        } else {
-                            // Fallback if there's only one ticker in the database
-                            secondaryTicker = currentTicker;
-                        }
-                    }
-                    
-                    refreshSidebarUI();
-                    updateView();
-                });
-            });
+            init() {
+                this.registerEventListeners();
+                this.updateView(); // Initial Asset Plot
+                this.updatePortfolioView(); // Initial Portfolio Plot
+            }
 
-            // Ticker click logic
-            tickerRows.forEach(row => {
-                row.addEventListener('click', function() {
-                    const clickedTicker = this.dataset.ticker;
-                    
-                    if (currentMode === 'map-2dcorr') {
-                        // If the user clicks a ticker that isn't the primary one, set it as the secondary (yellow) ticker.
-                        if (clickedTicker === currentTicker) {
-                            return;
-                        }
-                        secondaryTicker = clickedTicker;
-                    } else {
-                        // Just update the primary ticker.
-                        currentTicker = clickedTicker;
-                    }
-                    
-                    refreshSidebarUI();
-                    updateView();
-                });
-            });
-            
-            function refreshSidebarUI() {
-                // Update the chart title
-                const titleElement = document.getElementById('chart-title');
-                if (currentMode === 'map-2dcorr' && secondaryTicker) {
-                    titleElement.innerText = `${currentTicker} vs ${secondaryTicker}`;
-                } else {
-                    titleElement.innerText = currentTicker;
+            async fetchData(url) {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`Server Error: ${response.status}`);
+                return await response.json();
+            }
+
+            // --- Asset Level Logic ---
+            async updateView() {
+                this.dom.tickerTitle.innerText = this.state.currentTicker;
+                
+                let url = `/get_data?ticker=${this.state.currentTicker}&mode=${this.state.currentMode}`;
+                if (this.state.currentMode === 'map-2dcorr' && this.state.secondaryTicker) {
+                    url += `&ticker2=${this.state.secondaryTicker}`;
                 }
 
-                // Manage highlighting and indicators for every row
-                tickerRows.forEach(row => {
+                try {
+                    const data = await this.fetchData(url);
+                    const plotData = JSON.parse(data.fig_data);
+                    Plotly.react(this.dom.tickerContainer, plotData.data, plotData.layout);
+                    this.updateMetrics(data.metrics);
+                } catch (err) {
+                    console.error("Asset Plot Error:", err);
+                    this.dom.tickerContainer.innerHTML = '<p style="color:red;">Error loading chart.</p>';
+                }
+            }
+
+            updateMetrics(metrics) {
+                if (!metrics) return;
+                Object.entries(metrics).forEach(([key, value]) => {
+                    const el = document.getElementById(`${key}-display`);
+                    if (el) el.innerText = value;
+                });
+            }
+
+            // --- Portfolio Level Logic ---
+            async updatePortfolioView(force = false) {
+                this.dom.loader.classList.remove('hidden'); // Show loader, hide plot
+                
+                // Toggle Refresh button visibility
+                this.dom.refreshBtn.classList.toggle('invisible-placeholder', this.state.portfolioMode !== 'efficient_frontier');
+
+                this.dom.portfolioTitle.innerText = this.state.portfolioMode.toUpperCase().replace(/_/g, ' ');
+
+                const url = `/get_portfolio_data?mode=${this.state.portfolioMode}&force_update=${force}`;
+                
+                try {
+                    const data = await this.fetchData(url);
+                    this.dom.loader.classList.add('hidden');
+                    
+                    const fig = JSON.parse(data.fig_data);
+                    const config = (this.state.portfolioMode === 'heatmap') ? { displayModeBar: false } : {};
+                    
+                    Plotly.react(this.dom.portfolioContainer, fig.data, fig.layout, config);
+                } catch (err) {
+                    this.dom.loader.classList.add('hidden');
+                    console.error("Portfolio Plot Error:", err);
+                }
+            }
+
+            refreshSidebarUI() {
+                if (this.state.currentMode === 'map-2dcorr' && this.state.secondaryTicker) {
+                    this.dom.tickerTitle.innerText = `${this.state.currentTicker} vs ${this.state.secondaryTicker}`;
+                }
+
+                this.dom.tickerRows.forEach(row => {
                     const rowTicker = row.dataset.ticker;
                     const indicator = row.querySelector('.indicator');
 
-                    // Reset everything first
                     row.classList.remove('active-ticker', 'secondary-ticker');
                     if (indicator) indicator.innerText = '';
 
-                    // Apply primary (blue)
-                    if (rowTicker === currentTicker) {
+                    if (rowTicker === this.state.currentTicker) {
                         row.classList.add('active-ticker');
                         if (indicator) indicator.innerText = '▶';
-                    } 
-                    // Apply secondary (yellow)
-                    else if (currentMode === 'map-2dcorr' && rowTicker === secondaryTicker) {
+                    } else if (this.state.currentMode === 'map-2dcorr' && rowTicker === this.state.secondaryTicker) {
                         row.classList.add('secondary-ticker');
-                        if (indicator) indicator.innerText = 'II'; // Using 'II' to show it's the 2nd asset
+                        if (indicator) indicator.innerText = 'II';
                     }
                 });
             }
-            
-            document.getElementById('expand-btn').addEventListener('click', function() {
+
+            async handleExpandHistory() {
                 const startDate = document.getElementById('start-date').value;
                 if (!startDate) {
                     alert("Please select a date first.");
                     return;
                 }
 
-                const ticker = currentTicker; // Use the global currentTicker
-                const btn = this;
-                const originalText = btn.innerText;
+                const btn = document.getElementById('expand-btn');
+                const originalText = btn.innerHTML;
                 
-                btn.innerText = "Downloading...";
+                btn.innerHTML = `<span class="loader"></span> Downloading...`;
                 btn.disabled = true;
 
-                // Call a new Flask route
-                fetch(`/expand_history?ticker=${ticker}&start=${startDate}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        alert(data.message);
-                        btn.innerText = originalText;
-                        btn.disabled = false;
-                        // Refresh the current plot to show the new longer history
-                        updateView(); 
-                    })
-                    .catch(err => {
-                        console.error(err);
-                        btn.innerText = "Error";
-                        btn.disabled = false;
+                // Use the class state for the current ticker
+                const url = `/expand_history?ticker=${this.state.currentTicker}&start=${startDate}`;
+                
+                try {
+                    const data = await this.fetchData(url);
+                    alert(data.message);
+                    // Refresh the current plot to show the new longer history
+                    this.updateView(); 
+                } catch (err) {
+                    console.error("Expand Error:", err);
+                    alert("Failed to expand history.");
+                } finally {
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                    location.reload();
+                }
+            }
+
+            registerEventListeners() {
+                // Portfolio Tabs
+                this.dom.portfolioTabs.forEach(tab => {
+                    tab.addEventListener('click', (e) => {
+                        this.dom.portfolioTabs.forEach(t => t.classList.remove('portfolio-active-tab'));
+                        e.target.classList.add('portfolio-active-tab');
+                        this.state.portfolioMode = e.target.dataset.mode;
+                        this.updatePortfolioView();
                     });
-            });
+                });
+
+                // Asset Tabs
+                this.dom.tickerTabs.forEach(tab => {
+                    tab.addEventListener('click', (e) => {
+                        this.dom.tickerTabs.forEach(t => t.classList.remove('active-tab'));
+                        e.target.classList.add('active-tab');
+                        this.state.currentMode = e.target.dataset.mode;
+                        
+                        if (this.state.currentMode === 'map-2dcorr' && !this.state.secondaryTicker) {
+                            const other = [...this.dom.tickerRows].find(r => r.dataset.ticker !== this.state.currentTicker);
+                            this.state.secondaryTicker = other ? other.dataset.ticker : this.state.currentTicker;
+                        }
+                        this.refreshSidebarUI();
+                        this.updateView();
+                    });
+                });
+
+                // Ticker Sidebar Rows
+                this.dom.tickerRows.forEach(row => {
+                    row.addEventListener('click', (e) => {
+                        const clicked = e.currentTarget.dataset.ticker;
+                        if (this.state.currentMode === 'map-2dcorr') {
+                            if (clicked !== this.state.currentTicker) this.state.secondaryTicker = clicked;
+                        } else {
+                            this.state.currentTicker = clicked;
+                        }
+                        this.refreshSidebarUI();
+                        this.updateView();
+                    });
+                });
+
+                // Refresh/Expansion Buttons
+                this.dom.refreshBtn.addEventListener('click', () => this.updatePortfolioView(true));
+
+                // History Expansion Button
+                const expandBtn = document.getElementById('expand-btn');
+                if (expandBtn) {
+                    expandBtn.addEventListener('click', () => this.handleExpandHistory());
+                }
+            }
+        }
+
+        // Initialize the App
+        document.addEventListener('DOMContentLoaded', () => {
+            window.portfolioApp = new PortfolioApp();
         });
     </script>
 </body>

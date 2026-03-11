@@ -119,3 +119,27 @@ def load_cash():
     data = load_data('global', 'cash')
     return data.get('free_cash', 0.0)
 
+def get_assets(asset_class='stocks'):
+    #print("get_assets called")
+    
+    # Paths look like 'data/stocks_list.json'
+    data_dir = current_app.config['DATA_FOLDER']
+    path = os.path.join(data_dir,f"{asset_class}_list.json")
+    
+    if os.path.exists(path) and os.path.getsize(path) > 0: # Ensure path exists and file isn't empty
+        try:
+            with open(path, 'r') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"File error, returning defaults: {e}")
+    
+    # Defaults based on type
+    defaults = {
+        'stocks': ["AMAT", "AMT", "AMUN.PA"],
+        'crypto': ["BTC-USD", "ETH-USD"]#,
+        #'bonds': ["BND"],
+        #'commodities': ["GC=F"] # Gold TODO
+    }
+    
+    print("get_assets out")
+    return defaults.get(asset_class, [])
