@@ -78,12 +78,12 @@
         </button>
         
         <div id="category-selector" style="display: none; margin-top: 10px;">
-            <button data-category="stocks">Stocks</button>
-            <button data-category="crypto">Crypto</button>
+            <button class="category-selector" data-category="stocks">Stocks</button>
+            <button class="category-selector" data-category="crypto">Crypto</button>
         </div>
         
         <form id="ticker-form" method="POST" action="/add/stocks" 
-              style="display: none; padding: 20px; border: 1px solid #ccc; border-radius: 5px; margin-top: 15px;">
+              style="display: none; padding: 20px; border: 1px solid #ccc; border-radius: 5px; margin-top: 15px; max-width:150px; text-align:center;">
             <input type="hidden">
             
             <div class="form-group">
@@ -291,7 +291,7 @@
                             let displayVal = cell.val;
                             
                             // Format based on type
-                            if (cell.type === 'finance') {
+                            if (cell.type === 'finance' || cell.type === 'monitor') {
                                 // Use currency format or percentage based on suffix
                                 displayVal = cell.suffix === '%' 
                                     ? cell.val.toFixed(2) + '%' 
@@ -299,6 +299,10 @@
                             }
                             
                             this.setText(cell.id, displayVal);
+
+                            if (cell.bg_class) {
+                                this.setCellColor(cell.id, cell.bg_class);
+                            }
                         }
                     });
                 }
@@ -322,7 +326,17 @@
                 this.monitorStatusChanges();
             },
 
+            setCellColor(id, bgClass) {
+                const el = document.getElementById(id);
+                if (!el) return;
 
+                el.classList.remove("bg-green", "bg-orange", "bg-red");
+
+                if (bgClass) {
+                    el.classList.add(bgClass);
+                }
+            },
+            
             syncMetrics(subPortfolio) {
                 subPortfolio.assets.forEach(asset => {
                     // Loop through the schema defined in Python
@@ -404,14 +418,20 @@
             },
 
             monitorStatusChanges() {
-                const cells = document.querySelectorAll('.monitor-status');
+                const cells = document.querySelectorAll('[data-ticker][data-metric]');
                 const previousState = JSON.parse(localStorage.getItem('portfolio_state') || "{}");
                 const currentState = {};
                 let hasNewAlerts = false;
 
                 cells.forEach(cell => {
-                    const ticker = cell.getAttribute('data-ticker');
-                    const metric = cell.getAttribute('data-metric');
+                    const ticker = cell.dataset.ticker;
+                    const metric = cell.dataset.metric;
+
+                    if (!ticker || !metric){
+                        console.log("Ticker or metric undefined");
+                        return;
+                    }
+
                     const stateKey = `${ticker}_${metric}`;
                     
                     // Determine status based on class
@@ -697,9 +717,11 @@
                 }
 
                 // Category choice buttons
-                document.querySelectorAll('.category-choice').forEach(btn => {
+                document.querySelectorAll('.category-selector').forEach(btn => {
                     btn.onclick = (e) => {
+                        console.log("clicked: ");
                         const cat = e.currentTarget.getAttribute('data-category');
+                        console.log("cat: ", cat);
                         this.showForm(cat);
                     };
                 });

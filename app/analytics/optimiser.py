@@ -1,0 +1,158 @@
+import numpy as np
+import pandas as pd
+from scipy.optimize import minimize
+
+class PortfolioOptimiser:
+    def __init__(self, analyser):
+        self.analyser = analyser
+
+    # Function setting portfolio constraints
+    def setup_optimisation_constraints(self, tickers, max_weight=0.2, long_only=True):
+        n = len(tickers)
+
+        bounds = []
+        for _ in range(n):
+            if long_only:
+                bounds.append((0, max_weight))
+            else:
+                bounds.append((-max_weight, max_weight))
+
+        constraints = [
+            {'type': 'eq', 'fun': lambda w: np.sum(w) - 1}
+        ]
+
+        return bounds, constraints
+
+    def portfolio_return(self, weights, returns):
+        return np.sum(weights * returns)
+
+
+    def portfolio_volatility(self, weights, covariance):
+        return np.sqrt(weights.T @ covariance @ weights)
+
+    def _min_variance_objective(self, weights, covariance):
+        return self.portfolio_volatility(weights, covariance)
+
+    def optimise_min_variance(self,
+                              covariance_matrix,
+                              initial_guess,
+                              bounds,
+                              constraints
+    ):
+
+        result = minimize(self._min_variance_objective,
+                          initial_guess,
+                          args=(covariance_matrix,),
+                          method="SLSQP",
+                          bounds=bounds,
+                          constraints=constraints
+                          )
+
+        return result
+    
+    def build_efficient_frontier(self, annual_returns, covariance_matrix, bounds, constraints, num_points=25):
+        # Find the minimum variance portfolio
+        mvp_res = self.optimise_min_variance(covariance_matrix, np.repeat(1/len(annual_returns), len(annual_returns)), bounds, constraints)
+        min_return = self.portfolio_return(mvp_res.x, annual_returns)
+
+        # Find the max return given constraints
+        max_ret_res = minimize(
+            lambda w: -self.portfolio_return(w, annual_returns),
+            np.repeat(1/len(annual_returns), len(annual_returns)),
+            method="SLSQP",
+            bounds=bounds,
+            constraints=constraints
+        )
+        max_return = self.portfolio_return(max_ret_res.x, annual_returns)
+
+        # Create targets between the min and max
+        target_returns = np.linspace(min_return, max_return, num_points)
+        
+        frontier_returns = []
+        frontier_risks = []
+        frontier_weights = []
+
+        for target in target_returns:
+            cons = constraints + [{'type': 'eq', 'fun': lambda w: self.portfolio_return(w, annual_returns) - target}]
+            
+            result = minimize(
+                self._min_variance_objective,
+                mvp_res.x,
+                args=(covariance_matrix,),
+                method="SLSQP",
+                bounds=bounds,
+                constraints=cons
+            )
+
+            if result.success:
+                frontier_risks.append(self.portfolio_volatility(result.x, covariance_matrix))
+                frontier_returns.append(target)
+                frontier_weights.append(result.x)
+
+        return frontier_risks, frontier_returns, frontier_weights
+    
+    def perform_static_optimisation(
+        self,
+        annual_returns,
+        covariance_matrix,
+        initial_guess,
+        bounds,
+        constraints,
+        daily_returns,
+        risk_free_rate,
+        num_frontier_points=25
+    ):
+
+        results = {
+            "mvp": None,
+            "efficient_frontier_std_devs": [],
+            "efficient_frontier_returns": []
+        }
+
+        # -------------------
+        # Minimum variance
+        # -------------------
+
+        mvp_result = self.optimise_min_variance(
+            covariance_matrix,
+            initial_guess,
+            bounds,
+            constraints
+        )
+
+        weights = mvp_result.x
+
+        metrics = self.analyser._calculate_portfolio_metrics_full(
+            weights,
+            annual_returns,
+            daily_returns,
+            covariance_matrix,
+            risk_free_rate,
+            None,
+            None
+        )
+
+        results["mvp"] = {
+            "weights": weights,
+            "metrics": metrics,
+            "success": mvp_result.success,
+            "message": mvp_result.message
+        }
+
+        # -------------------
+        # Efficient frontier
+        # -------------------
+
+        stds, rets, wghts = self.build_efficient_frontier(
+            annual_returns,
+            covariance_matrix,
+            bounds,
+            constraints,
+            num_frontier_points
+        )
+
+        results["efficient_frontier_std_devs"] = stds
+        results["efficient_frontier_returns"] = rets
+        results["efficient_frontier_weights"] = wghts
+
+        return results

@@ -18,6 +18,7 @@
            onkeydown="if(event.key==='Enter') this.blur();">
 {% endmacro %}
 
+{# Body coloured cell #}
 {% macro monitor_cell(asset, metric_key, is_input=False, suffix='', prefix='') %}
     {% set config = asset.get_metric_config(metric_key) %}
     
@@ -31,6 +32,13 @@
         {% else %}
             {{ prefix }}{{ config.val | format_finance }}{{ suffix }}
         {% endif %}
+    </td>
+{% endmacro %}
+
+{# Footer coloured cell #}
+{% macro status_cell(val, bg_class, id='', suffix='') %}
+    <td class="monitor-status {{ bg_class }}" id="{{ id }}">
+        {{ val | format_finance }}{{ suffix }}
     </td>
 {% endmacro %}
 
@@ -111,7 +119,8 @@
                 <td id="{{ cell.id }}" colspan="{{ cell.colspan }}">
                     {{ cell.val | format_finance }}{{ cell.suffix }}
                 </td>
-
+            {% elif cell.type == 'monitor' %}
+                {{ status_cell(cell.val, cell.bg_class, id=cell.id, suffix=cell.suffix) }}
             {% else %}
                 <td class="{{ cell.class }}" colspan="{{ cell.colspan }}">
                     {{ cell.label }}

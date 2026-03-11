@@ -11,7 +11,7 @@ import pandas as pd
 from scipy import stats
 
 def plot_efficient_frontier_and_portfolios(
-    optimisation_results, individual_stock_metrics
+    optimisation_results, asset_analysers
 ):
     """
     Plots the efficient frontier, Monte Carlo simulations, individual stocks,
@@ -29,6 +29,7 @@ def plot_efficient_frontier_and_portfolios(
         num_assets (int): Number of assets in the portfolio.
     """
     fig = go.Figure()
+    tickers = list(asset_analysers.keys())
     
 #    RUN_STATIC_PORTFOLIO = feature_toggles['RUN_STATIC_PORTFOLIO']
     RUN_STATIC_PORTFOLIO = True
@@ -63,12 +64,30 @@ def plot_efficient_frontier_and_portfolios(
 #                 color='blue', linestyle='-', linewidth=2, label='Efficient frontier (Static)')
 
     if RUN_STATIC_PORTFOLIO and RUN_MVO_OPTIMISATION and optimisation_results['mvp'] and optimisation_results['efficient_frontier_std_devs']:
+        # Create a list of hover strings for each point
+        hover_texts = []
+        for w_set in optimisation_results.get('efficient_frontier_weights', []):
+            # Only show assets with a weight > 0.5% to keep it clean
+            weight_str = "<br>".join([
+                f"{tickers[i]}: {w*100:.1f}%" 
+                for i, w in enumerate(w_set) if w > 0.005
+            ])
+            hover_texts.append(weight_str)
+        
         fig.add_trace(go.Scatter(
             x=[s * 100 for s in optimisation_results['efficient_frontier_std_devs']],
             y=[r * 100 for r in optimisation_results['efficient_frontier_returns']],
             mode='lines',
             line=dict(color='blue', width=2),
-            name='Efficient frontier (Static)'
+            name='Efficient frontier (Static)',
+            customdata=hover_texts,
+            hovertemplate=(
+                "<b>Efficient Portfolio</b><br>" +
+                "Volatility: %{x:.2f}%<br>" +
+                "Return: %{y:.2f}%<br>" +
+                "------------------<br>" +
+                "%{customdata}%<extra></extra>"
+            )
         ))
 
 #    # Plot the Efficient Frontier line (Dynamic Covariance)
@@ -80,19 +99,24 @@ def plot_efficient_frontier_and_portfolios(
 
     # Plot individual assets in the return/std space
     colors = px.colors.qualitative.Dark24  # or any palette you prefer
-    for i, assets in enumerate(individual_stock_metrics):
+    
+    for i, analyser in enumerate(asset_analysers.values()):
+        annual_return = analyser.annual_return
+        volatility = analyser.annualised_volatility
+        ticker = analyser.asset.ticker
+
         fig.add_trace(go.Scatter(
-            x=[assets['annualised_std'] * 100],
-            y=[assets['annual_return'] * 100],
+            x=[volatility * 100],
+            y=[annual_return * 100],
             mode='markers+text',
             marker=dict(size=12, color=colors[i % len(colors)], line=dict(width=1.5, color='black')),
-            text=[assets['ticker']],
+            text=[ticker],
             textposition='top center',
-            name=assets['ticker'],
+            name=ticker,
             hovertemplate=(
-                f"<b>{assets['ticker']}</b><br>" +
-                f"Volatility: {assets['annualised_std']*100:.2f}%<br>" +
-                f"Return: {assets['annual_return']*100:.2f}%<extra></extra>"
+                f"<b>{ticker}</b><br>" +
+                f"Volatility: {volatility*100:.2f}%<br>" +
+                f"Return: {annual_return*100:.2f}%<extra></extra>"
             )
         ))
 

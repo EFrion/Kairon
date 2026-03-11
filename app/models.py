@@ -2,7 +2,29 @@ from types import SimpleNamespace
 from dataclasses import dataclass, field
 from typing import List, Dict, Any
 from app.utils import storage_utils
-import pandas as pd
+
+# class Metric:
+#     def __init__(self, id, label, type="finance",
+#                  suffix="", prefix="",
+#                  good=None, caution=None):
+
+#         self.id = id
+#         self.label = label
+#         self.type = type
+#         self.suffix = suffix
+#         self.prefix = prefix
+
+#         self.good = good
+#         self.caution = caution
+
+#     def get_status_class(self, value):
+#         if self.good and self.good(value):
+#             return "bg-green"
+
+#         if self.caution and self.caution(value):
+#             return "bg-orange"
+
+#         return "bg-red"
 
 @dataclass
 class AssetData:
@@ -103,29 +125,6 @@ class Asset(AssetData):
         total = self.latest_div * payment_frequency * self.shares
         return total
     
-    # Determine background colour. TODO: give user choice instead of hard coding
-    def get_metric_config(self, metric_name):
-
-        rules = self.METRIC_COLOUR_RULES.get(self.asset_type, {}).get(metric_name.lower())
-
-        if not rules:
-            return {'val': getattr(self, metric_name, 0), 'class': ''}
-        
-        # Resolve string thresholds
-        low = rules['low']
-        if isinstance(low, str):
-            low = getattr(self, low, 0)
-            
-        high = rules['high']
-        if isinstance(high, str):
-            high = getattr(self, high, 0)
-
-        val = getattr(self, metric_name, 0)
-
-        return {
-            'val': val,
-            'class': calculate_color(val, low, high, rules['dir'])
-        }
     
     # Define schema for the HTML renderer
     def get_schema(self):
@@ -166,6 +165,10 @@ class Asset(AssetData):
                 {'id': 'staking_yield', 'label': 'Staking yield', 'type': 'input', 'placeholder': '0.05'}
             ]
         return schema
+    
+    def get_metric_config(self, metric_name):
+        """Wrapper to call get_metric_config."""
+        return get_metric_config(self, metric_name, self.METRIC_COLOUR_RULES, self.asset_type)
     
     # Convert to a dictionary for the frontend
     def to_dict(self):
@@ -249,8 +252,8 @@ class Portfolio:
         )
 
         return SimpleNamespace(
-            div_yield = (total_income / total_mv),
-            div_growth = (total_income_growth / total_income)
+            div_yield = float(total_income / total_mv),
+            div_growth = float(total_income_growth / total_income)
         )
         
     @property
@@ -274,22 +277,37 @@ class Portfolio:
             for asset in self.assets:
                 asset.weight = 0
 
+    METRIC_COLOUR_RULES = {
+        'stocks':{
+            'div_yield': {'low': 2, 'high': 4, 'dir': 'high_is_better'},
+            'div_growth': {'low': 4, 'high': 8, 'dir': 'high_is_better'},
+            },
+        'crypto':{
+            'staking_yield': {'low': 2, 'high': 4, 'dir': 'high_is_better'}
+        } 
+    }
+
     # Define schema for the HTML renderer
-    def get_footer(self, asset_type):
+    def get_footer(self, asset_type, configs=None):
         if not self.assets:
             return []
 
         # Get the column structure from the first asset
         asset_schema = self.assets[0].get_schema()
         
+        if configs is None:
+            configs = {m: self.get_metric_config(m, asset_type) for m in ['div_yield', 'div_growth']}
+
         # Define which IDs in the schema should have footer values
         if asset_type == 'stocks':
             footer_map = {
                 'ticker':       {'label': 'Total Stocks', 'class': 'font-bold'},
                 'price':    {'val': self.total_cost_basis, 'id': 'total-cost-basis-stocks', 'type': 'finance'},
                 'market_value': {'val': self.total_market_value, 'id': 'total-market-value-stocks', 'type': 'finance'},
-                'div_yield':    {'val': self.portfolio_yield_data.div_yield, 'id': 'portfolio-div-yield', 'type': 'finance', 'suffix': '%'},
-                'div_growth':   {'val': self.portfolio_yield_data.div_growth, 'id': 'portfolio-div-growth', 'type': 'finance', 'suffix': '%'},
+                'div_yield':    {'val': configs['div_yield']['val'], 'id': 'portfolio-div-yield', 'type': 'monitor', 'suffix': '%',
+                                    'bg_class': configs['div_yield']['class']},
+                'div_growth':   {'val': configs['div_growth']['val'], 'id': 'portfolio-div-growth', 'type': 'monitor', 'suffix': '%',
+                                    'bg_class': configs['div_growth']['class']},
                 'months_paid':  {'type': 'visualizer'},
                 'annual_dividend': {'val': self.annual_dividends, 'id': 'annual-dividends', 'type': 'finance', 'suffix': ' €'},
             }
@@ -298,7 +316,7 @@ class Portfolio:
                 'ticker':       {'label': 'Total Crypto', 'class': 'font-bold'},
                 'price':    {'val': self.total_cost_basis, 'id': 'total-cost-basis-crypto', 'type': 'finance'},
                 'market_value': {'val': self.total_market_value, 'id': 'total-market-value-crypto', 'type': 'finance'},
-                'staking_yield':{'label': "Avg: N/A%", 'type': 'text'},
+                'staking_yield':{'label': "Avg: N/A%", 'type': 'monitor', 'suffix': '%'},
             }
 
         resolved_footer = []
@@ -328,7 +346,16 @@ class Portfolio:
 
         return resolved_footer
         
+    def get_metric_config(self, metric_name, asset_type):
+        """Wrapper to call get_metric_config."""
+        return get_metric_config(self, metric_name, self.METRIC_COLOUR_RULES, asset_type)
+    
+
     def to_dict(self, asset_type):
+        metric_configs = {
+            m: self.get_metric_config(m, asset_type)
+            for m in self.METRIC_COLOUR_RULES.get(asset_type, {}).keys()
+        }
         # Define footer_data to update metrics in JS
         return {
             'assets': [a.to_dict() for a in self.assets],
@@ -338,7 +365,8 @@ class Portfolio:
             'annual_dividends': self.annual_dividends,
             'portfolio_yield_data': vars(self.portfolio_yield_data),
             'sectors': vars(self.sectors),
-            'footer': self.get_footer(asset_type)
+            'status_colors': {m: cfg['class'] for m, cfg in metric_configs.items()},
+            'footer': self.get_footer(asset_type, metric_configs)
         }
 
     def __repr__(self):
@@ -445,48 +473,75 @@ class PortfolioManager:
         lines.append("="*count + "\n")
         
         return "\n".join(lines)
-
-class PortfolioAnalyser:
-    def __init__(self, portfolio: Portfolio, price_history: pd.DataFrame):
-        self.portfolio = portfolio
-        self.tickers = [a.ticker for a in portfolio.assets]
+    
+    @classmethod
+    def from_storage(cls, asset_classes, storage_utils, finance_data, interval='1d', force_update=False):
+        # Build a PortfolioManager
+        portfolios = {}
         
-        # Filter price history to only include tickers in our actual portfolio
-        self.data = price_history[self.tickers].dropna()
-        self.returns = self.data.pct_change().dropna()
-        
-        # Annualization factor: 252 for daily data
-        self.ann_factor = 252 
-
-    def get_current_weights(self):
-        """Extracts weights directly from the Asset objects."""
-        return np.array([a.weight / 100 for a in self.portfolio.assets])
-
-    def calculate_stats(self, weights=None):
-        """Calculates Return, Volatility, and Sharpe Ratio."""
-        if weights is None:
-            weights = self.get_current_weights()
+        for asset_type in asset_classes:
+            # Get the list of tickers
+            tickers = storage_utils.get_assets(asset_type) 
             
-        mean_returns = self.returns.mean() * self.ann_factor
-        cov_matrix = self.returns.cov() * self.ann_factor
+            # Fetch metrics
+            raw_metrics = finance_data.fetch_latest_metrics(
+                tickers, asset_type, interval=interval, force_update=force_update
+            )
+            
+            # Load user-specific data
+            data = PortfolioLoader.load_asset_data(asset_type)
+            
+            # Create Asset objects
+            assets = [
+                Asset(
+                    ticker=t,
+                    metrics=next(m for m in raw_metrics if m['Ticker']==t),
+                    asset_type=asset_type,
+                    shares=data['shares'].get(t, 0),
+                    price=data['price'].get(t, 0),
+                    env=data['env'].get(t, 0),
+                    soc=data['soc'].get(t, 0),
+                    gov=data['gov'].get(t, 0),
+                    cont=data['cont'].get(t, 0)
+                ) for t in tickers
+            ]
+            
+            portfolios[asset_type] = Portfolio(assets)
+            
+        free_cash = storage_utils.load_cash()
+        return cls(portfolios, free_cash=free_cash)
+
+
+# Determine background colour. TODO: give user choice instead of hard coding
+def get_metric_config(self, name, rule, asset_type):
+
+    rules = rule.get(asset_type, {}).get(name.lower())
+
+    if not rules:
+        return {'val': 0, 'class': ''}
+    
+    # Logic to find the value on Asset vs Portfolio
+    if hasattr(self, name):
+        val = getattr(self, name, 0)
+    elif hasattr(self, 'portfolio_yield_data'):
+        # Look inside the yield data namespace for Portfolio
+        val = getattr(self.portfolio_yield_data, name, 0)
+    else:
+        val = 0
+
+    # Resolve string thresholds
+    low = rules['low']
+    if isinstance(low, str):
+        low = getattr(self, low, 0)
         
-        port_return = np.sum(mean_returns * weights)
-        port_vol = np.sqrt(weights.T @ cov_matrix @ weights)
-        sharpe = port_return / port_vol if port_vol != 0 else 0
-        
-        return port_return, port_vol, sharpe
+    high = rules['high']
+    if isinstance(high, str):
+        high = getattr(self, high, 0)
 
-    def get_efficient_frontier(self, num_portfolios=100):
-        """Calculates the frontier points."""
-        # Logic from your original test.py, now encapsulated
-        # ... (Optimization loops here) ...
-        return frontier_data
-
-    def get_correlation_matrix(self):
-        """Returns the data for your heatmap."""
-        return self.returns.corr()
-
-
+    return {
+        'val': val,
+        'class': calculate_color(val, low, high, rules['dir'])
+    }
 
 # Generic background colour function
 def calculate_color(value, low, high, direction='high_is_better'):
@@ -502,28 +557,4 @@ def calculate_color(value, low, high, direction='high_is_better'):
         if value > high: return "bg-red"
         if value >= low: return "bg-orange"
         return "bg-green"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
     
